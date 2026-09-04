@@ -316,7 +316,7 @@ export default function TripWorkspacePage() {
           <div style={{ borderTop: "1px solid var(--color-border)", padding: "0.875rem", paddingBottom: "2.75rem" }}>
             <div style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)", borderRadius: "0.75rem", padding: "0.875rem" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.375rem" }}>
-                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                <Sparkles className="w-3.5 h-3.5 text-amber-700" />
                 <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-primary)" }}>Trip Concierge</span>
               </div>
               <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", lineHeight: 1.5, marginBottom: "0.625rem" }}>
@@ -380,7 +380,7 @@ export default function TripWorkspacePage() {
                     </h1>
 
                     <p style={{ fontSize: "0.875rem", color: "rgba(255, 255, 255, 0.85)", display: "flex", alignItems: "center", gap: "0.375rem", marginBottom: "0.875rem" }}>
-                      <MapPin className="w-3.5 h-3.5 text-indigo-400" />
+                      <MapPin className="w-3.5 h-3.5 text-amber-700" />
                       {[dest.state, dest.country].filter(Boolean).join(", ")}
                     </p>
 
@@ -399,7 +399,7 @@ export default function TripWorkspacePage() {
                     value: `${trip?.dates?.duration_days || days.length || 7} Days`,
                     sub: "Day-by-day planned",
                     Icon: CalendarDays,
-                    color: "text-indigo-400",
+                    color: "text-amber-700",
                   },
                   {
                     label: "Travelers",
@@ -588,7 +588,7 @@ export default function TripWorkspacePage() {
                               {activity.name}
                             </h4>
                             <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                              <MapPin className="w-3 h-3 text-indigo-400 shrink-0" />
+                              <MapPin className="w-3 h-3 text-amber-700 shrink-0" />
                               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{activity.location}</span>
                             </p>
                             <p style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", lineHeight: 1.6, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" }}>

@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.events import router as events_router
+from app.api.conversation import router as conversation_router
 from app.api.trips import router as trips_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
@@ -54,6 +55,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 # Routers
 app.include_router(trips_router)
 app.include_router(events_router)
+app.include_router(conversation_router)
 
 
 @app.get("/health")

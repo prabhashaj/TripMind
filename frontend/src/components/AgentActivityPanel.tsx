@@ -72,7 +72,7 @@ export function AgentActivityPanel({ compact }: { compact?: boolean }) {
             const isRunning = a.status === "running";
             const isDone = a.status === "completed";
             return (
-              <div key={k} style={{display:"flex",alignItems:"center",gap:"0.5rem",padding:"0.4375rem 0.5rem",borderRadius:"0.375rem",background:isRunning?"rgba(139, 92, 246, 0.08)":"transparent",border:isRunning?"1px solid rgba(139, 92, 246, 0.15)":"1px solid transparent",marginBottom:"0.125rem"}}>
+              <div key={k} style={{display:"flex",alignItems:"center",gap:"0.5rem",padding:"0.4375rem 0.5rem",borderRadius:"0.375rem",background:isRunning?"rgba(167, 122, 43, 0.08)":"transparent",border:isRunning?"1px solid rgba(167, 122, 43, 0.15)":"1px solid transparent",marginBottom:"0.125rem"}}>
                 <Dot status={a.status} />
                 <div style={{minWidth:0,flex:1}}>
                   <p style={{fontSize:"0.75rem",fontWeight:500,lineHeight:1.3,color:isDone?"var(--color-text-secondary)":"var(--color-text-primary)"}}>{a.name}</p>

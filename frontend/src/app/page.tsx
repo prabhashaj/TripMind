@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
-  Sparkles,
   MapPin,
   Calendar,
   Wallet,
@@ -11,12 +10,12 @@ import {
   Hotel,
   Compass,
   ArrowRight,
+  ArrowUpRight,
   ShieldCheck,
   MessageSquareText,
   Map,
 } from "lucide-react";
 import { TravelImage } from "@/components/TravelImage";
-import { TravelChat } from "@/components/TravelChat";
 import Link from "next/link";
 
 interface DestinationSpotlight {
@@ -95,7 +94,7 @@ const TRENDING_DESTINATIONS: DestinationSpotlight[] = [
 
 const FEATURES = [
   {
-    icon: <Calendar className="w-5 h-5 text-indigo-400" />,
+    icon: <Calendar className="w-5 h-5 text-amber-700" />,
     title: "Smart Day-by-Day Timeline",
     description: "Every day is mapped hour-by-hour with realistic travel buffers, opening times, and optimal transit pacing so you never feel rushed.",
   },
@@ -115,7 +114,7 @@ const FEATURES = [
     description: "Full visibility into every expense: lodging, intercity transit, local commute, dining, and activities with no hidden surprises.",
   },
   {
-    icon: <MessageSquareText className="w-5 h-5 text-purple-400" />,
+    icon: <MessageSquareText className="w-5 h-5 text-amber-700" />,
     title: "Interactive AI Trip Copilot",
     description: "Modify any itinerary in plain English: 'Swap Day 3 for a quieter hike', 'Find a cheaper boutique hotel', or 'Add vegetarian dining spots'.",
   },
@@ -144,8 +143,29 @@ const WORKFLOW_STEPS = [
   },
 ];
 
+const FIELD_NOTES = [
+  {
+    title: "Morning markets",
+    place: "Marrakech, Morocco",
+    image: "https://images.unsplash.com/photo-1539020140153-e479b8c22e70?w=900&auto=format&fit=crop&q=85",
+    note: "For the early riser who likes a city before it gets loud.",
+  },
+  {
+    title: "Long way round",
+    place: "Scottish Highlands",
+    image: "https://images.unsplash.com/photo-1500534623283-312aade485b7?w=900&auto=format&fit=crop&q=85",
+    note: "A scenic route, a warm inn, and nowhere else to be.",
+  },
+  {
+    title: "Salt air",
+    place: "Naxos, Greece",
+    image: "https://images.unsplash.com/photo-1601581875309-fafbf2d3ed3a?w=900&auto=format&fit=crop&q=85",
+    note: "For slow afternoons, small tavernas, and a later sunset.",
+  },
+];
+
 export default function HomePage() {
-  const [selectedPrompt, setSelectedPrompt] = useState<string | null>(null);
+  const router = useRouter();
 
   return (
     <div className="min-h-screen flex flex-col relative overflow-x-hidden" style={{ background: "linear-gradient(180deg, var(--color-bg-base) 0%, var(--color-bg-surface) 100%)", color: "var(--color-text-primary)" }}>
@@ -153,38 +173,26 @@ export default function HomePage() {
       <div className="hero-glow" />
 
       {/* ── Top Header ────────────────────────────────────────── */}
-      <header style={{ position: "sticky", top: 0, zIndex: 50, borderBottom: "1px solid var(--color-border)", background: "rgba(255, 255, 255, 0.98)", backdropFilter: "blur(16px)", boxShadow: "0 2px 8px rgba(139, 92, 246, 0.05)" }}>
+      <header className="classical-nav">
         <div className="container-nav">
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-            <div style={{ width: "2rem", height: "2rem", borderRadius: "0.5rem", background: "var(--gradient-primary)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 15px -2px rgba(139, 92, 246, 0.5)" }}>
-              <Map className="w-4 h-4 text-white" />
+          <div className="classical-brand">
+            <div className="classical-brand-mark">
+              <Map className="w-4 h-4" />
             </div>
-            <div>
-              <span style={{ fontWeight: 700, fontSize: "1.0625rem", letterSpacing: "-0.02em", color: "var(--color-text-primary)" }}>TripMind</span>
-            </div>
+            <span>TripMind</span>
           </div>
 
-          <nav style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
-            <a href="#destinations" className="btn-ghost" style={{ fontSize: "0.8125rem", padding: "0.375rem 0.75rem", color: "var(--color-text-secondary)", border: "1px solid transparent", background: "transparent", borderRadius: "var(--radius-md)", transition: "all var(--transition-base)" }}>
+          <nav className="classical-links">
+            <a href="#destinations">
               Destinations
             </a>
-            <a href="#features" className="btn-ghost" style={{ fontSize: "0.8125rem", padding: "0.375rem 0.75rem", color: "var(--color-text-secondary)", border: "1px solid transparent", background: "transparent", borderRadius: "var(--radius-md)", transition: "all var(--transition-base)" }}>
+            <a href="#features">
               Features
             </a>
-            <a href="#how-it-works" className="btn-ghost" style={{ fontSize: "0.8125rem", padding: "0.375rem 0.75rem", color: "var(--color-text-secondary)", border: "1px solid transparent", background: "transparent", borderRadius: "var(--radius-md)", transition: "all var(--transition-base)" }}>
+            <a href="#how-it-works">
               How it works
             </a>
-            <button
-              onClick={() => {
-                const el = document.getElementById("prompt-composer");
-                el?.scrollIntoView({ behavior: "smooth" });
-              }}
-              className="btn-primary"
-              style={{ fontSize: "0.8125rem", padding: "0.375rem 0.875rem" }}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-              Plan a Trip
-            </button>
+            <Link href="/login" className="classical-auth-link">Sign in</Link>
 
           </nav>
         </div>
@@ -207,9 +215,28 @@ export default function HomePage() {
             Turn your ideas, budget, and travel style into complete day-by-day itineraries with verified transport, curated stays, and local experiences.
           </p>
 
-          {/* Travel Chat Interface - Bigger */}
-          <div className="animate-scale-in animate-delay-300" style={{ maxWidth: "720px", margin: "0 auto" }}>
-            <TravelChat />
+          <div className="landing-launchpad animate-scale-in animate-delay-300">
+            <div className="launchpad-copy">
+              <span className="launchpad-kicker"><Compass className="w-4 h-4" /> Start with a thought</span>
+              <h2>A good journey begins with a little curiosity.</h2>
+              <p>Open your trip studio to shape a route, compare stays, and turn a loose idea into a plan worth following.</p>
+              <div className="launchpad-actions">
+                <Link href="/chat" className="classical-launch-button">Open trip studio <ArrowRight className="w-4 h-4" /></Link>
+                <span className="launchpad-note">No tabs. No guesswork. Just a better journey.</span>
+              </div>
+            </div>
+            <div className="launchpad-map" aria-hidden="true">
+              <TravelImage src="https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?w=1200&auto=format&fit=crop&q=85" alt="A vintage world map" className="launchpad-map-image" />
+              <div className="launchpad-map-wash" />
+              <div className="route-line" />
+              <span className="map-flight"><Plane className="w-5 h-5" /></span>
+              <span className="route-pin route-pin-one"><MapPin className="w-4 h-4" /></span>
+              <span className="route-pin route-pin-two"><MapPin className="w-4 h-4" /></span>
+              <span className="route-label route-label-one">NEW YORK</span>
+              <span className="route-label route-label-two">JAPAN</span>
+              <div className="map-location-card map-location-card-one"><strong>Tokyo</strong><span>Laneways, gardens, and late dinners</span></div>
+              <div className="map-location-card map-location-card-two"><strong>Kyoto</strong><span>Temple walks and quiet mornings</span></div>
+            </div>
           </div>
 
         </section>
@@ -234,16 +261,8 @@ export default function HomePage() {
               {TRENDING_DESTINATIONS.map((dest) => (
                 <div
                   key={dest.id}
-                  onClick={() => {
-                    const textarea = document.querySelector("#main-chat-input");
-                    if (textarea) {
-                      (textarea as HTMLTextAreaElement).value = dest.prompt;
-                      textarea.dispatchEvent(new Event("input", { bubbles: true }));
-                      (textarea as HTMLTextAreaElement).focus();
-                      window.scrollTo({ top: 0, behavior: "smooth" });
-                    }
-                  }}
-                  className="card"
+                  onClick={() => router.push(`/chat?prompt=${encodeURIComponent(dest.prompt)}`)}
+                  className="card landing-destination-card"
                   style={{
                     overflow: "hidden",
                     cursor: "pointer",
@@ -284,7 +303,7 @@ export default function HomePage() {
                   <div style={{ padding: "0.875rem 1rem", display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--color-bg-card)" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.875rem", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
                       <span style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
-                        <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                        <Clock className="w-3.5 h-3.5 text-amber-700" />
                         {dest.duration}
                       </span>
                       <span>·</span>
@@ -294,13 +313,31 @@ export default function HomePage() {
                       </span>
                     </div>
 
-                    <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-primary-600)", display: "flex", alignItems: "center", gap: "0.25rem" }}>
+                    <span className="destination-action" style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-primary-600)", display: "flex", alignItems: "center", gap: "0.25rem" }}>
                       Plan this <ArrowRight className="w-3 h-3" />
                     </span>
                   </div>
                 </div>
               ))}
             </div>
+          </div>
+        </section>
+
+        <section className="field-notes-section">
+          <div className="field-notes-heading">
+            <div>
+              <p className="section-eyebrow">A little inspiration</p>
+              <h2 className="font-display">Journeys with a point of view.</h2>
+            </div>
+            <p>Good plans leave room for the unexpected. Start with a mood and let the route take shape.</p>
+          </div>
+          <div className="field-notes-grid">
+            {FIELD_NOTES.map((note, index) => (
+              <article className={`field-note field-note-${index + 1}`} key={note.title}>
+                <div className="field-note-image-wrap"><TravelImage src={note.image} alt={note.place} className="field-note-image" /><span className="field-note-index">0{index + 1}</span></div>
+                <div className="field-note-copy"><span>{note.place}</span><h3>{note.title}</h3><p>{note.note}</p><Link href={`/chat?prompt=${encodeURIComponent(`Plan a trip to ${note.place} with a ${note.title.toLowerCase()} feel`)}`} aria-label={`Plan ${note.title}`}><ArrowUpRight className="w-4 h-4" /></Link></div>
+              </article>
+            ))}
           </div>
         </section>
 
@@ -360,17 +397,22 @@ export default function HomePage() {
           </div>
         </section>
 
+        <section className="travel-intelligence-band">
+          <div><span className="section-eyebrow">Built for real plans</span><h2 className="font-display">Less scrolling. More going.</h2></div>
+          <div className="intelligence-stats"><div><strong>01</strong><span>One calm workspace</span></div><div><strong>24/7</strong><span>Ideas when inspiration strikes</span></div><div><strong>ANY</strong><span>Routes worth revisiting</span></div></div>
+        </section>
+
       </main>
 
       {/* ── Footer ────────────────────────────────────────────── */}
       <footer style={{ borderTop: "1px solid var(--color-border)", padding: "2rem 0", background: "var(--color-bg-surface)" }}>
         <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "0 1.5rem", height: "auto", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
-            <div style={{ width: "1.5rem", height: "1.5rem", borderRadius: "0.375rem", background: "var(--gradient-primary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Map className="w-3 h-3 text-white" />
+          <div className="footer-brand">
+            <div className="classical-brand-mark footer-brand-mark">
+              <Map className="w-3 h-3" />
             </div>
-            <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-primary)" }}>TripMind</span>
-            <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>— Intelligent Travel Designer</span>
+            <span className="footer-brand-name">TripMind</span>
+            <span className="footer-brand-tagline">Intelligent Travel Designer</span>
           </div>
           <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
             © 2026 TripMind. Verified itineraries & live travel intelligence.

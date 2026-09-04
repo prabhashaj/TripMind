@@ -13,12 +13,12 @@ function formatCurrency(amount: number, currency: string = 'INR'): string {
 }
 
 const CATEGORY_CONFIG: Record<string, { label: string; icon: string; color: string }> = {
-  intercity_transport: { label: 'Intercity Transport', icon: '✈', color: '#60a5fa' },
-  local_transport: { label: 'Local Transport', icon: '🚕', color: '#818cf8' },
-  accommodation: { label: 'Accommodation', icon: '🏨', color: '#8b5cf6' },
-  food: { label: 'Food & Dining', icon: '🍽', color: '#f87171' },
-  activities: { label: 'Activities', icon: '📍', color: '#34d399' },
-  miscellaneous: { label: 'Miscellaneous', icon: '💼', color: '#9ca3b5' },
+  intercity_transport: { label: 'Intercity Transport', icon: 'AIR', color: '#60a5fa' },
+  local_transport: { label: 'Local Transport', icon: 'LOCAL', color: '#a77a2b' },
+  accommodation: { label: 'Accommodation', icon: 'STAY', color: '#a77a2b' },
+  food: { label: 'Food & Dining', icon: 'FOOD', color: '#f87171' },
+  activities: { label: 'Activities', icon: 'ACT', color: '#34d399' },
+  miscellaneous: { label: 'Miscellaneous', icon: 'OTHER', color: '#89909a' },
 };
 
 export function BudgetCard({ budget, targetBudget }: BudgetCardProps) {

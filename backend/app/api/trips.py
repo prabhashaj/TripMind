@@ -19,6 +19,7 @@ from app.core.dependencies import (
 )
 from app.core.logging import get_logger
 from app.models.trip_state import PlanningStatus, TripState
+from app.services.memory import memory_store
 from app.workflows.trip_workflow import run_trip_workflow
 
 router = APIRouter(prefix="/api/trips", tags=["trips"])
@@ -79,6 +80,10 @@ class ModifyTripRequest(BaseModel):
     modification: str
 
 
+class PreferenceAnswersRequest(BaseModel):
+    answers: dict[str, str]
+
+
 class SelectDestinationRequest(BaseModel):
     destination_id: str
 
@@ -114,6 +119,9 @@ async def start_planning(
         original_query=request.query,
         planning_status=PlanningStatus.IDLE,
     )
+    state.conversation_history.append({"role": "user", "content": request.query})
+    if request.user_id:
+        memory_store.remember(request.user_id, request.query)
     _trip_store[trip_id] = state
 
     async def run_workflow():
@@ -147,6 +155,40 @@ async def get_trip(trip_id: str) -> dict[str, Any]:
     if not state:
         raise HTTPException(status_code=404, detail="Trip not found")
     return state.model_dump(mode="json")
+
+
+@router.post("/{trip_id}/preference-answers")
+async def answer_preferences(
+    trip_id: str,
+    request: PreferenceAnswersRequest,
+    background_tasks: BackgroundTasks,
+    llm=Depends(get_llm_provider),
+    search=Depends(get_search_provider),
+    flights=Depends(get_flight_provider),
+    trains=Depends(get_train_provider),
+    hotels=Depends(get_hotel_provider),
+) -> dict[str, str]:
+    state = _trip_store.get(trip_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Trip not found")
+    answer_text = "; ".join(f"{key}: {value}" for key, value in request.answers.items())
+    state.original_query = f"{state.original_query}\nAdditional requirements: {answer_text}"
+    state.conversation_history.append({"role": "user", "content": answer_text})
+    state.pending_preference_questions = []
+    state.planning_status = PlanningStatus.IDLE
+    _trip_store[trip_id] = state
+
+    async def resume_workflow():
+        try:
+            final_state = await run_trip_workflow(state, llm, search, flights, trains, hotels)
+            _trip_store[trip_id] = final_state
+        except Exception as exc:
+            logger.error("preference_resume_failed", trip_id=trip_id, error=str(exc))
+            state.planning_status = PlanningStatus.FAILED
+            _trip_store[trip_id] = state
+
+    background_tasks.add_task(resume_workflow)
+    return {"status": "planning_resumed", "message": "Thanks. Continuing with your requirements."}
 
 
 @router.post("/{trip_id}/select-destination")

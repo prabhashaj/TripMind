@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, getUserId } from "@/lib/api";
 import { useTripStore } from "@/store/trip-store";
 import {
   ArrowRight,
@@ -14,68 +14,6 @@ import {
   AlertCircle,
   Loader2,
 } from "lucide-react";
-
-interface ExamplePrompt {
-  id: string;
-  category: string;
-  title: string;
-  query: string;
-  budget: string;
-  duration: string;
-  travelers: string;
-  emoji: string;
-}
-
-const EXAMPLE_PROMPTS: ExamplePrompt[] = [
-  {
-    id: "kashmir",
-    category: "Scenic Valley & Snow",
-    title: "Kashmir Valley & Gulmarg",
-    query: "Plan a 7-day trip from Hyderabad to Kashmir for 2 people under ₹60,000 with scenic valley stays and a gondola ride in Gulmarg",
-    budget: "₹60,000",
-    duration: "7 Days",
-    travelers: "2 People",
-    emoji: "🏔️",
-  },
-  {
-    id: "goa",
-    category: "Beach Getaway",
-    title: "South Goa Relaxed Retreat",
-    query: "Plan a relaxing 4-day beach vacation in South Goa from Mumbai under ₹30,000 for 2 adults with sunset cruises and beach shacks",
-    budget: "₹30,000",
-    duration: "4 Days",
-    travelers: "2 Adults",
-    emoji: "🏖️",
-  },
-  {
-    id: "coorg",
-    category: "Estate Homestays & Treks",
-    title: "Coorg Hills & Waterfalls",
-    query: "Plan a cozy 3-day weekend trip to Coorg from Bangalore for a couple under ₹25,000 with estate homestays and waterfall treks",
-    budget: "₹25,000",
-    duration: "3 Days",
-    travelers: "Couple",
-    emoji: "☕",
-  },
-  {
-    id: "rajasthan",
-    category: "Palaces & Heritage",
-    title: "Udaipur & Jodhpur Forts",
-    query: "Plan a 5-day cultural trip to Udaipur and Jodhpur from Delhi under ₹45,000 for 2 friends focused on palaces, rooftop dinners, and heritage walks",
-    budget: "₹45,000",
-    duration: "5 Days",
-    travelers: "2 Friends",
-    emoji: "🏰",
-  },
-];
-
-const VIBE_CHIPS = [
-  { label: "Mountain Retreat", emoji: "🏔️", prompt: "Plan a scenic mountain trip " },
-  { label: "Beach Holiday", emoji: "🏖️", prompt: "Plan a relaxing beach vacation " },
-  { label: "Romantic Escape", emoji: "💑", prompt: "Plan a romantic 4-day getaway " },
-  { label: "Solo Backpacking", emoji: "🎒", prompt: "Plan an adventurous solo budget trip " },
-  { label: "Heritage & Culture", emoji: "🏛️", prompt: "Plan a cultural heritage journey " },
-];
 
 export function TravelPrompt() {
   const [query, setQuery] = useState("");
@@ -102,7 +40,7 @@ export function TravelPrompt() {
     setIsLoading(true);
     try {
       reset();
-      const response = await api.startPlanning(trimmed);
+      const response = await api.startPlanning(trimmed, getUserId());
       setTripId(response.trip_id);
       setIsPlanning(true);
       router.push(`/plan/${response.trip_id}`);

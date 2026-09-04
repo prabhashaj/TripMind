@@ -3,6 +3,8 @@
  */
 'use client';
 
+import { MapPin } from 'lucide-react';
+
 import type { Activity } from '@/lib/api';
 
 interface ActivityCardProps {
@@ -11,18 +13,6 @@ interface ActivityCardProps {
   isAdded?: boolean;
 }
 
-const TYPE_ICONS: Record<string, string> = {
-  attraction: '🏛',
-  experience: '✨',
-  tour: '🗺',
-  museum: '🏺',
-  adventure: '🏔',
-  food: '🍜',
-  event: '🎉',
-  nature: '🌿',
-  default: '📍',
-};
-
 function formatCurrency(amount: number, currency: string = 'INR'): string {
   if (!amount) return 'Free';
   if (currency === 'INR') return `₹${Math.round(amount).toLocaleString('en-IN')}/person`;
@@ -30,8 +20,6 @@ function formatCurrency(amount: number, currency: string = 'INR'): string {
 }
 
 export function ActivityCard({ activity, onAdd, isAdded }: ActivityCardProps) {
-  const icon = TYPE_ICONS[activity.type] || TYPE_ICONS.default;
-
   return (
     <div
       className="rounded-2xl p-5 transition-all group animate-scale-in"
@@ -49,7 +37,7 @@ export function ActivityCard({ activity, onAdd, isAdded }: ActivityCardProps) {
           className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
           style={{ background: 'var(--color-bg-elevated)' }}
         >
-          {icon}
+          <MapPin className="w-5 h-5" style={{ color: 'var(--color-primary-500)' }} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">

@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field, computed_field
 
 class PlanningStatus(str, Enum):
     IDLE = "idle"
+    AWAITING_PREFERENCE_ANSWERS = "awaiting_preference_answers"
     EXTRACTING_PREFERENCES = "extracting_preferences"
     RESEARCHING_DESTINATIONS = "researching_destinations"
     AWAITING_DESTINATION_SELECTION = "awaiting_destination_selection"
@@ -388,6 +389,7 @@ class TripState(BaseModel):
     # Raw input
     original_query: str = ""
     conversation_history: list[dict[str, str]] = Field(default_factory=list)
+    pending_preference_questions: list[dict[str, Any]] = Field(default_factory=list)
 
     # Extracted preferences
     origin: str | None = None

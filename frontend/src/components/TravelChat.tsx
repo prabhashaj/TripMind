@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, getUserId } from '@/lib/api';
 import { useTripStore } from '@/store/trip-store';
 import { Send, Loader2, Sparkles, MapPin } from 'lucide-react';
 
@@ -10,6 +10,10 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+}
+
+interface TravelChatProps {
+  initialPrompt?: string;
 }
 
 const WELCOME_MESSAGES = [
@@ -32,12 +36,14 @@ const PLANNING_TRIGGERS = [
   'help me plan', 'please plan'
 ];
 
-export function TravelChat() {
+export function TravelChat({ initialPrompt = '' }: TravelChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
   const [suggestedFollowups, setSuggestedFollowups] = useState<string[]>([]);
+  const [userId, setUserId] = useState('');
+  const [conversationId, setConversationId] = useState('');
   
   const router = useRouter();
   const { setTripId, setIsPlanning, reset } = useTripStore();
@@ -45,12 +51,25 @@ export function TravelChat() {
 
   // Initialize with welcome message
   useEffect(() => {
+    if (initialPrompt) setInput(initialPrompt);
+  }, [initialPrompt]);
+
+  useEffect(() => {
     const welcomeMsg = WELCOME_MESSAGES[Math.floor(Math.random() * WELCOME_MESSAGES.length)];
     setMessages([{
       role: 'assistant',
       content: welcomeMsg,
       timestamp: new Date()
     }]);
+  }, []);
+
+  useEffect(() => {
+    const storedUserId = getUserId();
+    const storedConversationId = window.localStorage.getItem('tripmind-conversation-id') || crypto.randomUUID();
+    window.localStorage.setItem('tripmind-user-id', storedUserId);
+    window.localStorage.setItem('tripmind-conversation-id', storedConversationId);
+    setUserId(storedUserId);
+    setConversationId(storedConversationId);
   }, []);
 
   // Auto-scroll to bottom
@@ -155,7 +174,7 @@ export function TravelChat() {
       
       try {
         reset();
-        const response = await api.startPlanning(tripQuery);
+        const response = await api.startPlanning(tripQuery, userId || undefined);
         setTripId(response.trip_id);
         setIsPlanning(true);
         setHasStarted(true);
@@ -175,24 +194,23 @@ export function TravelChat() {
       return;
     }
     
-    // For now, generate helpful responses for travel questions
-    // In a full implementation, this would call an LLM API
     setIsLoading(true);
-    
-    // Simulate thinking delay
-    setTimeout(() => {
-      const response = generateTravelResponse(text);
+    try {
+      const result = await api.sendConversationMessage(userId, conversationId, text, true);
       setMessages(prev => [
         ...prev,
         {
           role: 'assistant',
-          content: response,
+          content: result.response,
           timestamp: new Date()
         }
       ]);
       setSuggestedFollowups(generateFollowUpSuggestions(text));
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'assistant', content: 'I could not reach my memory service. Please check that the backend is running.', timestamp: new Date() }]);
+    } finally {
       setIsLoading(false);
-    }, 800);
+    }
   };
 
   const generateTravelResponse = (userMessage: string): string => {
@@ -349,8 +367,8 @@ export function TravelChat() {
           border-radius: var(--radius-xl);
           overflow: hidden;
           box-shadow: 0 8px 25px rgba(139, 92, 246, 0.08), 0 4px 12px rgba(139, 92, 246, 0.05);
-          min-height: 320px;
-          max-height: 500px;
+          min-height: 440px;
+          max-height: 680px;
           transition: all var(--transition-base);
         }
         
@@ -580,6 +598,12 @@ export function TravelChat() {
 
         .travel-chat-messages::-webkit-scrollbar-thumb:hover {
           background: var(--color-text-muted);
+        }
+
+        @media (max-width: 520px) {
+          .travel-chat-container { min-height: 400px; }
+          .travel-chat-messages { padding: 16px 12px; }
+          .travel-chat-input { padding: 12px; }
         }
       `}</style>
     </div>

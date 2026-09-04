@@ -154,6 +154,12 @@ async def build_trip_workflow(
             return "replan"
         return "complete"
 
+    def should_continue_after_preferences(state: dict) -> str:
+        ts: TripState = state["trip_state"]
+        if ts.planning_status == PlanningStatus.AWAITING_PREFERENCE_ANSWERS:
+            return "wait"
+        return "continue"
+
     # ===== Build graph =====
 
     graph = StateGraph(dict)
@@ -169,7 +175,11 @@ async def build_trip_workflow(
 
     # Edge flow
     graph.set_entry_point("extract_preferences")
-    graph.add_edge("extract_preferences", "research_destinations")
+    graph.add_conditional_edges(
+        "extract_preferences",
+        should_continue_after_preferences,
+        {"wait": END, "continue": "research_destinations"},
+    )
     graph.add_edge("research_destinations", "research_parallel")
     graph.add_edge("research_parallel", "build_itinerary")
     graph.add_edge("build_itinerary", "calculate_budget")

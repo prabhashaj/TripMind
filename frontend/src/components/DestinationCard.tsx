@@ -27,8 +27,8 @@ export function DestinationCard({ destination, onSelect, isSelected }: Destinati
       onClick={() => onSelect(destination.id)}
       className={`rounded-2xl overflow-hidden cursor-pointer transition-all duration-200 group flex flex-col justify-between border ${
         isSelected
-          ? 'bg-[#151c2e] border-purple-400/80 ring-2 ring-purple-400/30 shadow-lg shadow-purple-500/10'
-          : 'bg-[#0f1422] border-white/[0.08] hover:border-purple-500/30 hover:bg-[#131a2b]'
+          ? 'bg-[var(--color-bg-card)] border-[#a77a2b]/80 ring-2 ring-[#a77a2b]/20 shadow-lg shadow-[#a77a2b]/10'
+          : 'bg-[var(--color-bg-card)] border-[var(--color-border)] hover:border-[#a77a2b]/50 hover:bg-[var(--color-bg-input)]'
       }`}
     >
       <div>
@@ -39,7 +39,7 @@ export function DestinationCard({ destination, onSelect, isSelected }: Destinati
           {/* Duration Badge */}
           <div className="absolute top-3 left-3">
               <Badge variant="default" className="bg-black/75 backdrop-blur-md border-white/20 text-white text-[11px] gap-1">
-              <Calendar className="w-3 h-3 text-purple-400" />
+              <Calendar className="w-3 h-3 text-amber-600" />
               <span>{destination.recommended_duration_days} Days</span>
             </Badge>
           </div>
@@ -47,8 +47,8 @@ export function DestinationCard({ destination, onSelect, isSelected }: Destinati
           {/* Match Score Badge */}
           {destination.match_score > 0 && (
             <div className="absolute top-3 right-3">
-              <Badge variant="purple" className="bg-black/80 backdrop-blur-md text-[11px] font-mono gap-1">
-                <Sparkles className="w-3 h-3 text-purple-400" />
+              <Badge variant="brass" className="bg-black/80 backdrop-blur-md text-[11px] font-mono gap-1">
+                <Sparkles className="w-3 h-3 text-amber-500" />
                 <span>{Math.round(destination.match_score * 100)}% Match</span>
               </Badge>
             </div>
@@ -59,7 +59,7 @@ export function DestinationCard({ destination, onSelect, isSelected }: Destinati
         <div className="p-5">
           <div className="flex items-start justify-between gap-2 mb-2">
             <div>
-              <h3 className="text-base font-bold text-white font-display leading-tight group-hover:text-purple-200 transition-colors">
+              <h3 className="text-base font-bold text-[var(--color-text-primary)] font-display leading-tight group-hover:text-amber-700 transition-colors">
                 {destination.name}
               </h3>
               <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1">
@@ -70,7 +70,7 @@ export function DestinationCard({ destination, onSelect, isSelected }: Destinati
 
             {/* Budget estimate tag */}
             <div className="text-right">
-              <span className="text-xs font-semibold text-purple-300 font-mono">
+              <span className="text-xs font-semibold text-amber-700 font-mono">
                 {formatCurrency(destination.estimated_cost_min, destination.currency)} - {formatCurrency(destination.estimated_cost_max, destination.currency)}
               </span>
             </div>
@@ -107,7 +107,7 @@ export function DestinationCard({ destination, onSelect, isSelected }: Destinati
       {/* Select Button */}
       <div className="p-5 pt-0">
         <Button
-          variant={isSelected ? 'purple' : 'outline'}
+          variant={isSelected ? 'brass' : 'outline'}
           size="sm"
           className="w-full gap-2 text-xs font-semibold"
         >

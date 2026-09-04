@@ -11,15 +11,15 @@ interface ItineraryTimelineProps {
 }
 
 const TYPE_CONFIG: Record<string, { icon: string; color: string; bg: string; label: string }> = {
-  transport: { icon: "✈", color: "#3b82f6", bg: "rgba(59, 130, 246, 0.12)", label: "Flight / Transit" },
-  flight: { icon: "✈", color: "#3b82f6", bg: "rgba(59, 130, 246, 0.12)", label: "Flight" },
-  check_in: { icon: "🏨", color: "#8b5cf6", bg: "rgba(139, 92, 246, 0.12)", label: "Hotel Check-In" },
-  check_out: { icon: "🏨", color: "#8b5cf6", bg: "rgba(139, 92, 246, 0.12)", label: "Hotel Check-Out" },
-  activity: { icon: "📍", color: "#10b981", bg: "rgba(16, 185, 129, 0.12)", label: "Experience" },
-  meal: { icon: "🍽", color: "#ef4444", bg: "rgba(239, 68, 68, 0.12)", label: "Dining" },
-  rest: { icon: "☕", color: "#6b7280", bg: "rgba(107, 114, 128, 0.1)", label: "Rest / Leisure" },
-  free_time: { icon: "🌟", color: "#a78bfa", bg: "rgba(167, 139, 250, 0.12)", label: "Free Exploration" },
-  transfer: { icon: "🚕", color: "#3b82f6", bg: "rgba(59, 130, 246, 0.12)", label: "Local Transfer" },
+  transport: { icon: "AIR", color: "#3b82f6", bg: "rgba(59, 130, 246, 0.12)", label: "Flight / Transit" },
+  flight: { icon: "AIR", color: "#3b82f6", bg: "rgba(59, 130, 246, 0.12)", label: "Flight" },
+  check_in: { icon: "STAY", color: "#a77a2b", bg: "rgba(167, 122, 43, 0.12)", label: "Hotel Check-In" },
+  check_out: { icon: "STAY", color: "#a77a2b", bg: "rgba(167, 122, 43, 0.12)", label: "Hotel Check-Out" },
+  activity: { icon: "ACT", color: "#10b981", bg: "rgba(16, 185, 129, 0.12)", label: "Experience" },
+  meal: { icon: "FOOD", color: "#ef4444", bg: "rgba(239, 68, 68, 0.12)", label: "Dining" },
+  rest: { icon: "REST", color: "#6b7280", bg: "rgba(107, 114, 128, 0.1)", label: "Rest / Leisure" },
+  free_time: { icon: "FREE", color: "#c9aa6c", bg: "rgba(201, 170, 108, 0.12)", label: "Free Exploration" },
+  transfer: { icon: "RIDE", color: "#3b82f6", bg: "rgba(59, 130, 246, 0.12)", label: "Local Transfer" },
 };
 
 function fmtDur(mins: number) {
@@ -105,7 +105,7 @@ function ItemRow({ item, isLast }: { item: ItineraryItem; isLast: boolean }) {
 
           {item.location && (
             <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "0.25rem", marginBottom: item.description ? "0.375rem" : 0 }}>
-              <MapPin className="w-3 h-3 text-indigo-500 shrink-0" />
+              <MapPin className="w-3 h-3 text-amber-700 shrink-0" />
               <span>{item.location}</span>
             </p>
           )}
@@ -162,7 +162,7 @@ export function ItineraryTimeline({ days, selectedDayIndex, onSelectDay }: Itine
                 <span style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.02em" }}>
                   Day {d.day_number}
                 </span>
-                {active && <Sparkles className="w-2.5 h-2.5 text-indigo-400" />}
+                {active && <Sparkles className="w-2.5 h-2.5 text-amber-700" />}
               </div>
               <span style={{ fontSize: "0.6875rem", color: active ? "var(--color-text-secondary)" : "var(--color-text-muted)", marginTop: "0.125rem", maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {d.location}
@@ -191,7 +191,7 @@ export function ItineraryTimeline({ days, selectedDayIndex, onSelectDay }: Itine
               {day.title}
             </h3>
             <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "0.3rem" }}>
-              <MapPin className="w-3.5 h-3.5 text-indigo-500" />
+                <MapPin className="w-3.5 h-3.5 text-amber-700" />
               {day.location}
             </p>
           </div>

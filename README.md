@@ -75,7 +75,13 @@ npm run dev
 | `/api/trips/{id}/select-hotel` | POST | Select hotel |
 | `/api/trips/{id}/modify` | POST | Natural language modification |
 | `/api/trips/{id}/sources` | GET | Get provenance sources |
+| `/api/conversation/message` | POST | Chat with short-term and long-term memory |
+| `/api/conversation/{user_id}/memory` | GET/DELETE | Read or clear saved memory |
 | `/health` | GET | Provider availability status |
+
+### Conversation memory
+
+The conversation agent keeps the latest 20 turns as short-term context for each browser conversation. When the user leaves **Remember** enabled, explicit preferences and travel facts are stored per user under the backend data directory and reused in later conversations. Memory is keyed by a hashed browser-generated user ID; no API keys or environment files are persisted in the repository.
 
 ## Agents
 

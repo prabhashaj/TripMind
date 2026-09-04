@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'default' | 'outline' | 'ghost' | 'purple' | 'secondary';
+  variant?: 'default' | 'outline' | 'ghost' | 'brass' | 'secondary';
   size?: 'default' | 'sm' | 'lg' | 'icon';
 }
 
@@ -13,10 +13,10 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         className={cn(
-          'inline-flex items-center justify-center whitespace-nowrap rounded-xl font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 disabled:pointer-events-none disabled:opacity-50 cursor-pointer active:scale-[0.98]',
+          'inline-flex items-center justify-center whitespace-nowrap rounded-xl font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 disabled:pointer-events-none disabled:opacity-50 cursor-pointer active:scale-[0.98]',
           {
-            'bg-purple-500 text-white hover:bg-purple-400 shadow-md shadow-purple-500/20 font-semibold':
-              variant === 'purple',
+            'bg-amber-700 text-white hover:bg-amber-800 shadow-md shadow-amber-700/20 font-semibold':
+              variant === 'brass',
             'bg-slate-800 text-slate-100 hover:bg-slate-700 border border-white/10':
               variant === 'default',
             'border border-white/15 bg-transparent hover:bg-white/5 text-slate-200':

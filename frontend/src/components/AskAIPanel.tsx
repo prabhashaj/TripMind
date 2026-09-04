@@ -192,13 +192,6 @@ export function AskAIPanel({ tripId }: AskAIPanelProps) {
                 animationDelay: `${index * 50}ms`,
               }}
             >
-              <span className="suggestion-icon">
-                {index === 0 && '💰'}
-                {index === 1 && '📅'}
-                {index === 2 && '🏨'}
-                {index === 3 && '😌'}
-                {index === 4 && '🚄'}
-              </span>
               <span className="suggestion-text">{action}</span>
             </button>
           ))}
@@ -288,7 +281,7 @@ export function AskAIPanel({ tripId }: AskAIPanelProps) {
           width: 100%;
           height: 100%;
           border-radius: 16px;
-          background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 50%, #f97316 100%);
+          background: linear-gradient(135deg, #27364a 0%, #a77a2b 100%);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -430,7 +423,7 @@ export function AskAIPanel({ tripId }: AskAIPanelProps) {
           display: flex;
           align-items: center;
           justify-content: center;
-          color: #a78bfa;
+          color: #c9aa6c;
           border: 1px solid rgba(139, 92, 246, 0.3);
         }
 
@@ -467,7 +460,7 @@ export function AskAIPanel({ tripId }: AskAIPanelProps) {
         }
 
         .user-bubble {
-          background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 50%, #f97316 100%);
+          background: linear-gradient(135deg, #27364a 0%, #a77a2b 100%);
           color: white;
           border-bottom-right-radius: 4px;
         }
@@ -482,7 +475,7 @@ export function AskAIPanel({ tripId }: AskAIPanelProps) {
         .assistant-name {
           font-size: 13px;
           font-weight: 700;
-          color: #a78bfa;
+          color: #c9aa6c;
           letter-spacing: 0.02em;
         }
 
@@ -521,7 +514,7 @@ export function AskAIPanel({ tripId }: AskAIPanelProps) {
           width: 8px;
           height: 8px;
           border-radius: 50%;
-          background: #8b5cf6;
+          background: #a77a2b;
           animation: typing-bounce 1.4s ease-in-out infinite;
         }
 
@@ -647,7 +640,7 @@ export function AskAIPanel({ tripId }: AskAIPanelProps) {
           width: 44px;
           height: 44px;
           border-radius: 14px;
-          background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 50%, #f97316 100%);
+          background: linear-gradient(135deg, #27364a 0%, #a77a2b 100%);
           border: none;
           color: white;
           cursor: pointer;

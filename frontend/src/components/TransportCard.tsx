@@ -26,10 +26,10 @@ function formatCurrency(amount: number, currency: string): string {
 }
 
 const MODE_ICONS: Record<string, string> = {
-  flight: '✈',
-  train: '🚆',
-  bus: '🚌',
-  car: '🚗',
+  flight: 'AIR',
+  train: 'RAIL',
+  bus: 'BUS',
+  car: 'CAR',
 };
 
 const MODE_LABELS: Record<string, string> = {
@@ -64,7 +64,7 @@ export function TransportCard({ leg, onSelect, isSelected }: TransportCardProps)
                 background: isSelected ? 'rgba(139, 92, 246, 0.15)' : 'var(--color-bg-elevated)',
               }}
             >
-              {MODE_ICONS[leg.mode] || '🚗'}
+              {MODE_ICONS[leg.mode] || 'CAR'}
             </div>
             <div>
               <div className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useTripStore } from "@/store/trip-store";
 import { createTripSSEClient } from "@/lib/sse-client";
@@ -18,10 +18,12 @@ export default function PlanPage() {
   const tripId = params.id as string;
   const { tripState, isPlanning, planningError, preferenceQuestions, setTripId, handleEvent } = useTripStore();
   const sseRef = useRef<ReturnType<typeof createTripSSEClient> | null>(null);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!tripId) return;
     setTripId(tripId);
+    api.getTrip(tripId).then((state) => useTripStore.getState().setTripState(state)).catch(console.error);
     const client = createTripSSEClient(tripId);
     sseRef.current = client;
     client.on("*", handleEvent).on("trip.ready", () => { setTimeout(() => router.push(`/trip/${tripId}`), 1200); }).connect();
@@ -30,6 +32,16 @@ export default function PlanPage() {
 
   const handleSelectDestination = async (destinationId: string) => {
     try { await api.selectDestination(tripId, destinationId); } catch (err) { console.error(err); }
+  };
+
+  const submitPreferences = async () => {
+    if (!preferenceQuestions.every((question) => answers[question.id]?.trim())) return;
+    try {
+      await api.answerPreferences(tripId, answers);
+      useTripStore.setState({ preferenceQuestions: [], isPlanning: true });
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   const destinations = tripState?.candidate_destinations || [];
@@ -53,9 +65,14 @@ export default function PlanPage() {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-            {isPlanning ? (
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.3125rem 0.75rem", borderRadius: "99px", background: "rgba(139, 92, 246, 0.12)", border: "1px solid rgba(139, 92, 246, 0.25)" }}>
-                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--color-primary-500)", boxShadow: "0 0 6px rgba(139, 92, 246, 0.7)", animation: "dot-pulse 2.5s infinite ease-in-out", display: "inline-block" }} />
+            {tripState?.planning_status === "awaiting_preference_answers" ? (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.3125rem 0.75rem", borderRadius: "99px", background: "var(--color-primary-50)", border: "1px solid var(--color-primary-200)" }}>
+                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--color-primary-500)", display: "inline-block" }} />
+                <span style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--color-primary-600)" }}>Waiting for your answers</span>
+              </div>
+            ) : isPlanning ? (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.3125rem 0.75rem", borderRadius: "99px", background: "var(--color-primary-50)", border: "1px solid var(--color-primary-200)" }}>
+                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--color-primary-500)", boxShadow: "0 0 6px var(--color-primary-500)", animation: "dot-pulse 2.5s infinite ease-in-out", display: "inline-block" }} />
                 <span style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--color-primary-600)" }}>Agents working</span>
               </div>
             ) : (
@@ -103,16 +120,16 @@ export default function PlanPage() {
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.625rem" }}>
               <MapPin className="w-3.5 h-3.5" style={{ color: "var(--color-primary-500)" }} />
               <span style={{ fontSize: "0.6875rem", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--color-primary-500)" }}>
-                {hasDestinations ? "Destinations found" : "Searching destinations"}
+                {hasDestinations ? "Destinations found" : preferenceQuestions.length > 0 ? "Details needed" : "Searching destinations"}
               </span>
             </div>
             <h1 style={{ fontSize: "1.5rem", fontWeight: 700, letterSpacing: "-0.025em", marginBottom: "0.375rem" }}>
-              {hasDestinations ? "Choose your destination" : "Discovering your perfect destination"}
+              {hasDestinations ? "Choose your destination" : preferenceQuestions.length > 0 ? "Tell us a little more first" : "Discovering your perfect destination"}
             </h1>
             <p style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
               {hasDestinations
                 ? `${destinations.length} destinations matched your preferences. Select one to continue planning.`
-                : "AI agents are researching destinations, flights, hotels, and activities in real time."}
+                : preferenceQuestions.length > 0 ? "Answer these essentials and the agents will begin your research." : "AI agents are researching destinations, flights, hotels, and activities in real time."}
             </p>
           </div>
 
@@ -136,10 +153,11 @@ export default function PlanPage() {
               {preferenceQuestions.map((question) => (
                 <div className="preference-question" key={question.id}>
                   <strong>{question.prompt}</strong>
-                  <div className="option-row">{question.options.map((option) => <button key={option} type="button" className="choice">{option}</button>)}</div>
-                  {question.allow_text && <input className="preference-answer" placeholder="Or type your answer" aria-label={question.prompt} />}
+                  <div className="option-row">{question.options.map((option) => <button key={option} type="button" className={`choice ${answers[question.id] === option ? "choice-selected" : ""}`} onClick={() => setAnswers((current) => ({ ...current, [question.id]: option }))}>{option}</button>)}</div>
+                  {question.allow_text && <input className="preference-answer" value={answers[question.id] || ""} onChange={(event) => setAnswers((current) => ({ ...current, [question.id]: event.target.value }))} placeholder="Type your answer" aria-label={question.prompt} />}
                 </div>
               ))}
+              <button type="button" className="btn btn-primary" onClick={submitPreferences} disabled={!preferenceQuestions.every((question) => answers[question.id]?.trim())}>Continue planning</button>
             </div>
           )}
 
@@ -155,7 +173,7 @@ export default function PlanPage() {
                 />
               ))}
             </div>
-          ) : isPlanning ? (
+          ) : isPlanning && preferenceQuestions.length === 0 ? (
             <div>
               {/* Loading state */}
               <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", marginBottom: "1.25rem", padding: "0.75rem 1rem", borderRadius: "0.625rem", background: "var(--color-bg-card)", border: "1px solid var(--color-border)" }}>
@@ -208,12 +226,6 @@ export default function PlanPage() {
         </main>
       </div>
 
-      <style>{`
-        @keyframes shimmer {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(200%); }
-        }
-      `}</style>
     </div>
   );
 }
