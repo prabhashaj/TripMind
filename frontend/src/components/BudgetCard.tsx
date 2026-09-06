@@ -7,22 +7,37 @@ interface BudgetCardProps {
   targetBudget?: number | null;
 }
 
-function formatCurrency(amount: number, currency: string = 'INR'): string {
+function fmtCurrency(amount: number, currency = 'INR'): string {
   if (currency === 'INR') return `₹${Math.round(amount).toLocaleString('en-IN')}`;
   return `${currency} ${Math.round(amount).toLocaleString()}`;
 }
 
-const CATEGORY_CONFIG: Record<string, { label: string; icon: string; color: string }> = {
-  intercity_transport: { label: 'Intercity Transport', icon: 'AIR', color: '#60a5fa' },
-  local_transport: { label: 'Local Transport', icon: 'LOCAL', color: '#a77a2b' },
-  accommodation: { label: 'Accommodation', icon: 'STAY', color: '#a77a2b' },
-  food: { label: 'Food & Dining', icon: 'FOOD', color: '#f87171' },
-  activities: { label: 'Activities', icon: 'ACT', color: '#34d399' },
-  miscellaneous: { label: 'Miscellaneous', icon: 'OTHER', color: '#89909a' },
+function fmtTime(isoString: string): string {
+  try {
+    return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
+  } catch {
+    return isoString;
+  }
+}
+
+const CATEGORY_CONFIG: Record<string, { label: string; abbr: string; color: string }> = {
+  intercity_transport: { label: 'Intercity Transport', abbr: 'AIR',   color: '#60a5fa' },
+  local_transport:     { label: 'Local Transport',     abbr: 'LOCAL', color: '#a77a2b' },
+  accommodation:       { label: 'Accommodation',        abbr: 'STAY',  color: '#a77a2b' },
+  food:                { label: 'Food & Dining',         abbr: 'FOOD',  color: '#f87171' },
+  activities:          { label: 'Activities',            abbr: 'ACT',   color: '#34d399' },
+  miscellaneous:       { label: 'Miscellaneous',         abbr: 'OTHER', color: '#89909a' },
 };
 
 export function BudgetCard({ budget, targetBudget }: BudgetCardProps) {
-  const total = budget.intercity_transport + budget.local_transport + budget.accommodation + budget.food + budget.activities + budget.miscellaneous;
+  const total =
+    (budget.intercity_transport ?? 0) +
+    (budget.local_transport ?? 0) +
+    (budget.accommodation ?? 0) +
+    (budget.food ?? 0) +
+    (budget.activities ?? 0) +
+    (budget.miscellaneous ?? 0);
+
   const rangeMin = total * 0.9;
   const rangeMax = total * 1.15;
 
@@ -30,79 +45,72 @@ export function BudgetCard({ budget, targetBudget }: BudgetCardProps) {
   const overage = targetBudget && isOverBudget ? total - targetBudget : 0;
 
   const categoryBreakdown = [
-    { key: 'intercity_transport', value: budget.intercity_transport },
-    { key: 'accommodation', value: budget.accommodation },
-    { key: 'food', value: budget.food },
-    { key: 'activities', value: budget.activities },
-    { key: 'local_transport', value: budget.local_transport },
-    { key: 'miscellaneous', value: budget.miscellaneous },
+    { key: 'intercity_transport', value: budget.intercity_transport ?? 0 },
+    { key: 'accommodation',       value: budget.accommodation ?? 0 },
+    { key: 'food',                value: budget.food ?? 0 },
+    { key: 'activities',          value: budget.activities ?? 0 },
+    { key: 'local_transport',     value: budget.local_transport ?? 0 },
+    { key: 'miscellaneous',       value: budget.miscellaneous ?? 0 },
   ].filter((c) => c.value > 0);
 
+  /* FX metadata — optional fields added in Phase 2 */
+  const fxRate: number | undefined = budget.fx_rate;
+  const fxFrom: string | undefined = budget.fx_from_currency;
+  const fxTimestamp: string | undefined = budget.fx_timestamp;
+  const hasFx = fxRate && fxFrom && fxFrom !== budget.currency;
+
   return (
-    <div
-      className="rounded-2xl overflow-hidden"
-      style={{
-        background: 'var(--color-bg-card)',
-        border: isOverBudget ? '1px solid rgba(248, 113, 113, 0.3)' : '1px solid var(--color-border)',
-      }}
-    >
-      {/* Header — total */}
-      <div className="px-6 py-6 text-center" style={{ borderBottom: '1px solid var(--color-border)' }}>
-        <p className="text-sm mb-2" style={{ color: 'var(--color-text-muted)' }}>
-          Trip estimate
-        </p>
-        <div
-          className="text-5xl font-bold font-display mb-1 animate-fade-in-up"
-          style={{ color: isOverBudget ? 'var(--color-error)' : 'var(--color-text-primary)' }}
-        >
-          {formatCurrency(total, budget.currency)}
+    <div className={`budget-card${isOverBudget ? ' budget-card--over' : ''}`}>
+      {/* ── Header — total amount ── */}
+      <div className="budget-card-header">
+        <p className="budget-card-trip-label">Trip estimate</p>
+
+        <div className={`budget-card-total${isOverBudget ? ' budget-card-total--over' : ''} animate-fade-in-up`}>
+          {fmtCurrency(total, budget.currency)}
         </div>
-        <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-          Range: {formatCurrency(rangeMin, budget.currency)} – {formatCurrency(rangeMax, budget.currency)}
+
+        <p className="budget-card-range">
+          Range: {fmtCurrency(rangeMin, budget.currency)} – {fmtCurrency(rangeMax, budget.currency)}
         </p>
 
-        {/* Over budget warning */}
+        {/* ── FX rate note ── */}
+        {hasFx && (
+          <p className="fx-rate-note">
+            1 {fxFrom} = {budget.currency === 'INR' ? '₹' : ''}{fxRate?.toFixed(2)} {budget.currency}
+            <span className="fx-rate-divider">·</span>
+            {fxTimestamp ? `updated ${fmtTime(fxTimestamp)}` : 'live rate'}
+          </p>
+        )}
+
+        {/* Over budget banner */}
         {isOverBudget && (
-          <div
-            className="mt-4 px-4 py-2.5 rounded-xl text-sm animate-fade-in"
-            style={{
-              background: 'rgba(248, 113, 113, 0.1)',
-              border: '1px solid rgba(248, 113, 113, 0.2)',
-              color: 'var(--color-error)',
-            }}
-          >
-            {formatCurrency(overage, budget.currency)} over your {formatCurrency(targetBudget!, budget.currency)} budget.
+          <div className="budget-banner budget-banner--over animate-fade-in">
+            {fmtCurrency(overage, budget.currency)} over your {fmtCurrency(targetBudget!, budget.currency)} budget.
             Try asking: "Optimize my budget" or "Find a cheaper hotel".
           </div>
         )}
 
-        {/* Within budget */}
+        {/* Within budget banner */}
         {targetBudget && !isOverBudget && (
-          <div
-            className="mt-4 px-4 py-2 rounded-xl text-sm animate-fade-in"
-            style={{
-              background: 'rgba(52, 211, 153, 0.07)',
-              border: '1px solid rgba(52, 211, 153, 0.15)',
-              color: 'var(--color-success)',
-            }}
-          >
-            Within your {formatCurrency(targetBudget, budget.currency)} budget
+          <div className="budget-banner budget-banner--ok animate-fade-in">
+            Within your {fmtCurrency(targetBudget, budget.currency)} budget
           </div>
         )}
       </div>
 
-      {/* Breakdown */}
-      <div className="p-6">
-        <p className="text-xs font-medium mb-4" style={{ color: 'var(--color-text-muted)' }}>Breakdown</p>
+      {/* ── Breakdown ── */}
+      <div className="budget-card-body">
+        <p className="budget-breakdown-label">Breakdown</p>
 
-        {/* Visual bar */}
-        <div className="flex h-2 rounded-full overflow-hidden mb-6 gap-px">
+        {/* Proportional colour bar */}
+        <div className="budget-bar">
           {categoryBreakdown.map(({ key, value }) => {
             const config = CATEGORY_CONFIG[key];
             const pct = (value / total) * 100;
             return (
               <div
                 key={key}
+                className="budget-bar-segment"
                 style={{ width: `${pct}%`, background: config.color }}
                 title={`${config.label}: ${Math.round(pct)}%`}
               />
@@ -111,32 +119,36 @@ export function BudgetCard({ budget, targetBudget }: BudgetCardProps) {
         </div>
 
         {/* Line items */}
-        <div className="space-y-3">
-          {(budget.line_items || []).map((item, i) => {
+        <div className="budget-line-items">
+          {(budget.line_items || []).map((item: any, i: number) => {
             const catKey = item.category;
-            const config = CATEGORY_CONFIG[catKey] || { label: item.label, icon: '📋', color: '#9ca3b5' };
+            const config = CATEGORY_CONFIG[catKey] || { label: item.label, abbr: '📋', color: '#9ca3b5' };
             return (
-              <div key={i} className="flex items-center justify-between gap-3 animate-fade-in-up">
-                <div className="flex items-center gap-2.5">
+              <div key={i} className="budget-line-row animate-fade-in-up">
+                <div className="budget-line-left">
                   <div
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0"
-                    style={{ background: `${config.color}15` }}
+                    className="budget-line-icon"
+                    style={{ background: `${config.color}18` }}
                   >
-                    {config.icon}
+                    {config.abbr}
                   </div>
                   <div>
-                    <div className="text-sm" style={{ color: 'var(--color-text-primary)' }}>
-                      {item.label}
-                    </div>
+                    <div className="budget-line-name">{item.label}</div>
                     {item.is_estimated && (
-                      <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                        Estimated
+                      <div className="budget-line-estimated">Estimated</div>
+                    )}
+                    {/* Per-line FX note if line has a different source currency */}
+                    {hasFx && item.source_currency && item.source_currency !== budget.currency && (
+                      <div className="fx-rate-note">
+                        {fmtCurrency(item.source_amount, item.source_currency)}
+                        <span className="fx-rate-divider">→</span>
+                        {fmtCurrency(item.amount, budget.currency)}
                       </div>
                     )}
                   </div>
                 </div>
-                <span className="text-sm font-medium tabular-nums" style={{ color: 'var(--color-text-primary)' }}>
-                  {formatCurrency(item.amount, item.currency)}
+                <span className="budget-line-amount">
+                  {fmtCurrency(item.amount, item.currency)}
                 </span>
               </div>
             );

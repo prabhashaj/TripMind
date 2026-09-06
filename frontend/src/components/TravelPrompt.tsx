@@ -53,12 +53,12 @@ export function TravelPrompt() {
   };
 
   return (
-    <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }}>
+    <div className="w-full flex flex-col items-center gap-4">
 
       {/* Vibe chips */}
       {/* Search card */}
-      <form className="search-card" style={{ width: "100%" }} onSubmit={handleSubmit}>
-        <div style={{ padding: "1.125rem 1.25rem 0.75rem" }}>
+      <form className="search-card w-full" onSubmit={handleSubmit}>
+        <div className="px-5 pt-[1.125rem] pb-3">
           <textarea
             ref={textareaRef}
             value={query}
@@ -67,37 +67,25 @@ export function TravelPrompt() {
             placeholder="Optional: where would you like to go, and where are you starting from?"
             rows={3}
             disabled={isLoading}
-            style={{
-              width: "100%",
-              resize: "none",
-              background: "transparent",
-              color: "var(--color-text-primary)",
-              fontSize: "0.9375rem",
-              lineHeight: 1.65,
-              border: "none",
-              outline: "none",
-              minHeight: "72px",
-              fontFamily: "inherit",
-            }}
+            className="w-full resize-none bg-transparent text-primary text-[0.9375rem] leading-[1.65] border-none outline-none min-h-[72px] font-inherit"
           />
         </div>
 
         {/* Footer row */}
-        <div style={{ padding: "0.75rem 1.25rem", borderTop: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", background: "var(--color-bg-surface)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-border bg-surface">
+          <div className="flex items-center gap-2">
             <div className="live-dot" />
-            <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>TripMind ready</span>
-            <span style={{ color: "var(--color-border-strong)", fontSize: "0.75rem" }}>·</span>
-            <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
-              Press <kbd style={{ padding: "0.125rem 0.375rem", background: "var(--color-bg-muted)", border: "1px solid var(--color-border)", borderRadius: "0.25rem", fontSize: "0.6875rem", fontFamily: "monospace", color: "var(--color-text-secondary)" }}>Enter</kbd> to plan
+            <span className="text-xs text-muted">TripMind ready</span>
+            <span className="text-xs text-muted">·</span>
+            <span className="text-xs text-muted">
+              Press <kbd className="px-1.5 py-0.5 bg-muted border border-border rounded text-[0.6875rem] font-mono text-secondary">Enter</kbd> to plan
             </span>
           </div>
 
           <button
             type="submit"
             disabled={isLoading}
-            className="btn btn-primary"
-            style={{ flexShrink: 0, minWidth: "8rem" }}
+            className="btn btn-primary shrink-0 min-w-[8rem]"
           >
             {isLoading ? (
               <>
@@ -116,7 +104,7 @@ export function TravelPrompt() {
 
       {/* Error */}
       {error && (
-        <div style={{ width: "100%", padding: "0.75rem 1rem", borderRadius: "0.625rem", background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", color: "var(--color-error)", fontSize: "0.8125rem", display: "flex", alignItems: "flex-start", gap: "0.625rem" }}>
+        <div className="w-full px-4 py-3 rounded-[0.625rem] bg-red-500/10 border border-red-500/30 text-destructive text-[0.8125rem] flex items-start gap-2.5">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
           <span>{error}</span>
         </div>

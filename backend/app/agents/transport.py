@@ -44,10 +44,11 @@ async def run_transport_agent(
         message=f"Comparing flights, trains and other transport from {origin} to {destination}",
     ))
 
+    from datetime import date, timedelta
     departure_date = (
         state.dates.start.isoformat()
         if state.dates.start
-        else __import__("datetime").date.today().isoformat()
+        else (date.today() + timedelta(days=30)).isoformat()
     )
 
     intercity_legs: list[TransportLeg] = []
@@ -67,14 +68,14 @@ async def run_transport_agent(
         destination=destination,
         departure_date=departure_date,
         adults=state.travelers.adults,
-        currency=state.budget_currency,
+        currency=state.budget_currency or "INR",
     )
     train_task = train_provider.search_trains(
         origin=origin,
         destination=destination,
         departure_date=departure_date,
         passengers=state.travelers.total,
-        currency=state.budget_currency,
+        currency=state.budget_currency or "INR",
     )
 
     flight_results, train_results = await asyncio.gather(

@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     amadeus_client_secret: str = ""
     workflow_node_timeout_seconds: float = 30.0
 
+    # Travelpayouts
+    travelpayouts_token: str = ""
+
     @field_validator("cors_origins")
     @classmethod
     def parse_cors_origins(cls, v: str) -> list[str]:

@@ -42,7 +42,7 @@ class TavilySearchProvider(SearchProvider):
         query: str,
         max_results: int = 10,
         search_depth: str = "basic",
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, Any]:
         """
         Search the web and return structured results.
         Results are extracted facts, NOT raw HTML — safe to pass to agents.
@@ -62,13 +62,19 @@ class TavilySearchProvider(SearchProvider):
             include_raw_content=False,  # Don't expose raw HTML to agents (security)
         )
 
-        image_urls = []
+        images = []
         seen_images: set[str] = set()
         for image in response.get("images", []):
-            image_url = image.get("url") if isinstance(image, dict) else image
-            if isinstance(image_url, str) and image_url.startswith(("http://", "https://")) and image_url not in seen_images:
-                image_urls.append(image_url)
-                seen_images.add(image_url)
+            if isinstance(image, dict):
+                url = image.get("url")
+                desc = image.get("description") or image.get("title") or ""
+            else:
+                url = image
+                desc = ""
+                
+            if isinstance(url, str) and url.startswith(("http://", "https://")) and url not in seen_images:
+                images.append({"url": url, "description": desc})
+                seen_images.add(url)
 
         results = []
         for r in response.get("results", []):
@@ -78,7 +84,7 @@ class TavilySearchProvider(SearchProvider):
                 "content": r.get("content", ""),  # Tavily's extracted snippet
                 "score": r.get("score", 0.0),
                 "published_date": r.get("published_date"),
-                "image_url": image_urls.pop(0) if image_urls else None,
+                "image_url": None,
             })
 
         # Prepend Tavily's synthesized answer if present
@@ -89,10 +95,11 @@ class TavilySearchProvider(SearchProvider):
                 "content": response["answer"],
                 "score": 1.0,
                 "published_date": None,
+                "image_url": None,
             })
 
         logger.debug("tavily_results", count=len(results))
-        return results
+        return {"results": results, "images": images}
 
     async def search_with_context(
         self,
@@ -103,7 +110,8 @@ class TavilySearchProvider(SearchProvider):
         Returns a single string of concatenated search content
         suitable for inclusion in an LLM prompt.
         """
-        results = await self.search(query, max_results=max_results, search_depth="advanced")
+        res = await self.search(query, max_results=max_results, search_depth="advanced")
+        results = res.get("results", [])
         if not results:
             return "No search results found."
 

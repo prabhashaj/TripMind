@@ -7,6 +7,7 @@ import { createTripSSEClient } from "@/lib/sse-client";
 import { api } from "@/lib/api";
 import { TransportCard } from "@/components/TransportCard";
 import { HotelCard } from "@/components/HotelCard";
+import { ActivityCard } from "@/components/ActivityCard";
 import { ItineraryTimeline } from "@/components/ItineraryTimeline";
 import { BudgetCard } from "@/components/BudgetCard";
 import { AskAIPanel } from "@/components/AskAIPanel";
@@ -37,6 +38,7 @@ import {
 import Link from "next/link";
 import { TravelImage } from "@/components/TravelImage";
 import { AgentActionShimmer } from "@/components/AgentActionShimmer";
+import { TripMap, type MapPoint } from "@/components/TripMap";
 
 const NAV_ITEMS = [
   { key: "overview", label: "Overview", icon: LayoutDashboard },
@@ -147,30 +149,76 @@ export default function TripWorkspacePage() {
     }
   };
 
+  const mapPoints: MapPoint[] = [];
+  days.forEach((day, idx) => {
+    if (selectedDayIndex !== null && selectedDayIndex !== idx) return;
+    day.items.forEach((item) => {
+      let lat = undefined;
+      let lng = undefined;
+      let type: "hotel" | "activity" | "destination" | undefined = undefined;
+
+      if (item.hotel_id) {
+        const h = hotels.find((x) => x.id === item.hotel_id);
+        if (h && h.latitude && h.longitude) {
+          lat = h.latitude;
+          lng = h.longitude;
+          type = "hotel";
+        }
+      } else if (item.activity_id) {
+        const a = activities.find((x) => x.id === item.activity_id);
+        if (a && a.latitude && a.longitude) {
+          lat = a.latitude;
+          lng = a.longitude;
+          type = "activity";
+        }
+      }
+
+      if (lat !== undefined && lng !== undefined && type) {
+        mapPoints.push({
+          id: item.id,
+          name: item.title,
+          lat,
+          lng,
+          type,
+          day_index: day.day_number,
+        });
+      }
+    });
+  });
+  if (mapPoints.length === 0 && dest?.latitude && dest?.longitude) {
+    mapPoints.push({
+      id: dest.id || "dest",
+      name: dest.name,
+      lat: dest.latitude,
+      lng: dest.longitude,
+      type: "destination",
+    });
+  }
+
   return (
-    <div style={{ minHeight: "100vh", background: "var(--color-bg-base)", color: "var(--color-text-primary)", display: "flex", flexDirection: "column" }}>
+    <div className="trip-workspace">
 
       {/* ── Top Header Bar ────────────────────────────────────────── */}
       <header className="classical-nav">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 1.5rem", height: "3.75rem", gap: "1rem", maxWidth: "1400px", margin: "0 auto" }}>
+        <div className="trip-header-inner">
 
           {/* Left: Brand & Destination */}
-          <div style={{ display: "flex", alignItems: "center", gap: "1rem", minWidth: 0 }}>
-            <Link href="/" className="classical-brand" style={{ textDecoration: "none", fontSize: "1.3rem" }}>
-              <div className="classical-brand-mark" style={{ width: "2.1rem", height: "2.1rem" }}>
+          <div className="trip-header-left">
+            <Link href="/" className="classical-brand">
+              <div className="classical-brand-mark">
                 <Map className="w-3.5 h-3.5" />
               </div>
               <span>TripMind</span>
             </Link>
 
-            <span style={{ color: "#c5b99f" }}>/</span>
+            <span className="plan-breadcrumb">/</span>
 
-            <div style={{ minWidth: 0 }}>
-              <p style={{ fontSize: "0.9375rem", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", letterSpacing: "-0.01em" }}>
+            <div className="min-w-0">
+              <p className="trip-dest-name">
                 {dest ? dest.name : "Your Trip Workspace"}
               </p>
               {trip && (
-                <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "0.375rem" }}>
+                <p className="trip-dest-meta">
                   <span>{trip.travelers?.adults || 1} Adult{(trip.travelers?.adults || 1) > 1 ? "s" : ""}</span>
                   <span>•</span>
                   <span>{trip.dates?.duration_days || days.length || 7} Days</span>
@@ -186,33 +234,28 @@ export default function TripWorkspacePage() {
           </div>
 
           {/* Right: Status & Actions */}
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexShrink: 0 }}>
+          <div className="trip-header-right">
             {isPlanning && (
-              <div style={{ display: "flex", alignItems: "center", gap: "0.4375rem", padding: "0.3125rem 0.75rem", borderRadius: "99px", background: "rgba(139, 92, 246 / 0.15)", border: "1px solid rgba(139, 92, 246 / 0.3)" }}>
+              <div className="trip-status-pill trip-status-pill--planning">
                 <AgentActionShimmer compact />
               </div>
             )}
 
             {trip?.verification?.overall_status && (
-              <div style={{
-                display: "flex", alignItems: "center", gap: "0.375rem",
-                padding: "0.3125rem 0.75rem", borderRadius: "99px",
-                background: trip.verification.overall_status === "passed" ? "rgba(16, 185, 129, 0.12)" : "rgba(251, 191, 36, 0.12)",
-                border: `1px solid ${trip.verification.overall_status === "passed" ? "rgba(16, 185, 129, 0.3)" : "rgba(251, 191, 36, 0.3)"}`,
-              }}>
-                <ShieldCheck className="w-3.5 h-3.5" style={{ color: trip.verification.overall_status === "passed" ? "var(--color-success)" : "var(--color-warning)" }} />
-                <span style={{ fontSize: "0.75rem", fontWeight: 600, color: trip.verification.overall_status === "passed" ? "var(--color-success)" : "var(--color-warning)" }}>
+              <div className={`trip-status-pill ${trip.verification.overall_status === "passed" ? "trip-status-pill--verified" : "trip-status-pill--warning"}`}>
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span className="text-xs font-semibold">
                   {trip.verification.overall_status === "passed" ? "Verified Feasible" : trip.verification.overall_status}
                 </span>
               </div>
             )}
 
             {/* Total Budget Pill */}
-            <div style={{ padding: "0.3125rem 0.875rem", borderRadius: "0.5rem", background: "var(--color-bg-card)", border: isOverBudget ? "1px solid rgba(239, 68, 68, 0.4)" : "1px solid var(--color-border)", textAlign: "right" }}>
-              <p style={{ fontSize: "0.875rem", fontWeight: 700, color: isOverBudget ? "var(--color-error)" : "var(--color-text-primary)", fontVariantNumeric: "tabular-nums" }}>
+            <div className={`trip-budget-pill ${isOverBudget ? "trip-budget-pill--over" : ""}`}>
+              <p className={`trip-budget-amount ${isOverBudget ? "trip-budget-amount--over" : ""}`}>
                 {formatINR(totalCost)}
               </p>
-              <p style={{ fontSize: "0.625rem", color: "var(--color-text-muted)", fontWeight: 500 }}>
+              <p className="trip-budget-label">
                 {targetBudget > 0 ? (isOverBudget ? "Over Budget" : "Est. Total") : "Est. Total"}
               </p>
             </div>
@@ -220,8 +263,7 @@ export default function TripWorkspacePage() {
             {/* Export / Print PDF */}
             <button
               onClick={() => typeof window !== "undefined" && window.print()}
-              className="btn btn-ghost"
-              style={{ fontSize: "0.8125rem", padding: "0.375rem 0.625rem" }}
+              className="btn btn-ghost text-xs py-1.5 px-2.5"
               title="Print or Save Itinerary as PDF"
             >
               <Printer className="w-3.5 h-3.5" />
@@ -231,8 +273,7 @@ export default function TripWorkspacePage() {
             {/* Share */}
             <button
               onClick={handleShare}
-              className="btn btn-ghost"
-              style={{ fontSize: "0.8125rem", padding: "0.375rem 0.625rem" }}
+              className="btn btn-ghost text-xs py-1.5 px-2.5"
               title="Copy trip link"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
@@ -242,8 +283,7 @@ export default function TripWorkspacePage() {
             {/* New Trip */}
             <Link
               href="/"
-              className="btn btn-ghost"
-              style={{ fontSize: "0.8125rem", padding: "0.375rem 0.75rem", border: "1px solid var(--color-border)" }}
+              className="btn btn-ghost text-xs py-1.5 px-3 border border-border"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               New Trip
@@ -253,25 +293,14 @@ export default function TripWorkspacePage() {
       </header>
 
       {/* ── Main Workspace Layout ─────────────────────────────────── */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+      <div className="trip-layout">
 
         {/* ── Sidebar Navigation ──────────────────────────────────── */}
-        <aside style={{
-          width: "240px",
-          flexShrink: 0,
-          borderRight: "1px solid var(--color-border)",
-          background: "var(--color-bg-surface))",
-          display: "flex",
-          flexDirection: "column",
-          position: "sticky",
-          top: "3.75rem",
-          height: "calc(100vh - 3.75rem)",
-          overflowY: "auto",
-        }}>
+        <aside className="trip-sidebar">
 
           {/* Main Navigation Items */}
-          <nav style={{ padding: "0.875rem 0.625rem", flex: 1 }}>
-            <p style={{ fontSize: "0.625rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-muted)", padding: "0 0.75rem 0.5rem" }}>
+          <nav className="trip-sidebar-nav">
+            <p className="trip-sidebar-section-label">
               Trip Plan
             </p>
             {NAV_ITEMS.map((item) => {
@@ -282,39 +311,14 @@ export default function TripWorkspacePage() {
                 <button
                   key={item.key}
                   onClick={() => selectPanel(item.key)}
-                  style={{
-                    width: "100%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "0.5625rem 0.75rem",
-                    borderRadius: "0.5rem",
-                    marginBottom: "0.1875rem",
-                    fontSize: "0.875rem",
-                    fontWeight: isActive ? 600 : 400,
-                    background: isActive ? "rgba(139, 92, 246, 0.1)" : "transparent",
-                    border: isActive ? "1px solid rgba(139, 92, 246 / 0.25)" : "1px solid transparent",
-                    color: isActive ? "var(--color-primary-600)" : "var(--color-text-secondary)",
-                    cursor: "pointer",
-                    transition: "all 0.15s",
-                    textAlign: "left",
-                    fontFamily: "inherit",
-                  }}
+                  className={`trip-nav-btn ${isActive ? "trip-nav-btn--active" : ""}`}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
-                    <Icon style={{ width: "1.0625rem", height: "1.0625rem", flexShrink: 0 }} />
+                  <div className="trip-nav-btn-inner">
+                    <Icon className="w-4 h-4 shrink-0" />
                     <span>{item.label}</span>
                   </div>
                   {count > 0 && (
-                    <span style={{
-                      fontSize: "0.6875rem",
-                      fontWeight: 600,
-                      padding: "0.125rem 0.4375rem",
-                      borderRadius: "99px",
-                      background: isActive ? "rgba(139, 92, 246 / 0.25)" : "var(--color-bg-elevated)",
-                      color: isActive ? "var(--color-primary-600)" : "var(--color-text-muted)",
-                      fontVariantNumeric: "tabular-nums",
-                    }}>
+                    <span className={`trip-nav-count ${isActive ? "trip-nav-count--active" : "trip-nav-count--default"}`}>
                       {count}
                     </span>
                   )}
@@ -323,20 +327,19 @@ export default function TripWorkspacePage() {
             })}
           </nav>
 
-          {/* Bottom Copilot Card (Replaces raw agent internals) */}
-          <div style={{ borderTop: "1px solid var(--color-border)", padding: "0.875rem", paddingBottom: "2.75rem" }}>
-            <div style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)", borderRadius: "0.75rem", padding: "0.875rem" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.375rem" }}>
+          {/* Bottom Copilot Card */}
+          <div className="trip-sidebar-concierge">
+            <div className="trip-concierge-card">
+              <div className="trip-concierge-header">
                 <Sparkles className="w-3.5 h-3.5 text-amber-700" />
-                <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-primary)" }}>Trip Concierge</span>
+                <span className="trip-concierge-title">Trip Concierge</span>
               </div>
-              <p style={{ fontSize: "0.6875rem", color: "var(--color-text-muted)", lineHeight: 1.5, marginBottom: "0.625rem" }}>
+              <p className="trip-concierge-body">
                 Need adjustments? Tell our AI to swap hotels, add sights, or tune budget.
               </p>
               <button
                 onClick={() => selectPanel("ai")}
-                className="btn btn-primary"
-                style={{ width: "100%", fontSize: "0.75rem", padding: "0.375rem 0.5rem", justifyContent: "center" }}
+                className="btn btn-primary w-full text-xs py-1.5 px-2 justify-center"
               >
                 Ask Copilot
               </button>
@@ -345,65 +348,45 @@ export default function TripWorkspacePage() {
         </aside>
 
         {/* ── Main Content Area ───────────────────────────────────── */}
-        <main style={{ flex: 1, overflowY: "auto", padding: "2rem", maxWidth: "980px" }}>
+        <main className="trip-main">
 
           {/* ── Overview Tab ─────────────────────────────────────── */}
           {selectedPanel === "overview" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "1.75rem" }}>
+            <div className="trip-section--overview">
 
               {/* Destination Hero Banner */}
               {dest && (
-                <div style={{
-                  position: "relative",
-                  borderRadius: "1rem",
-                  overflow: "hidden",
-                  border: "1px solid var(--color-border)",
-                  minHeight: "220px",
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "flex-end",
-                  padding: "1.75rem",
-                  boxShadow: "var(--shadow-card)",
-                }}>
-                  {/* Background Image */}
+                <div className="trip-dest-hero">
                   <TravelImage
                     src={dest.image_url || getDestinationImage(dest.name)}
                     alt={dest.name}
                     className="absolute inset-0 w-full h-full object-cover"
                   />
-                  {/* Dark gradient overlay for perfect readability */}
-                  <div style={{
-                    position: "absolute",
-                    inset: 0,
-                    background: "linear-gradient(to top, rgba(9, 10, 15, 0.95) 0%, rgba(9, 10, 15, 0.55) 60%, rgba(9, 10, 15, 0.3) 100%)",
-                  }} />
+                  <div className="trip-dest-hero-overlay" />
 
-                  {/* Content over image */}
-                  <div style={{ position: "relative", zIndex: 1 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.375rem" }}>
-                      <span style={{ fontSize: "0.6875rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", padding: "0.1875rem 0.5rem", borderRadius: "99px", background: "rgba(139, 92, 246 / 0.3)", backdropFilter: "blur(8px)", border: "1px solid rgba(139, 92, 246 / 0.4)", color: "var(--color-primary-400)" }}>
-                        Selected Destination
-                      </span>
-                    </div>
+                  <div className="trip-dest-hero-content">
+                    <span className="trip-dest-hero-tag">
+                      Selected Destination
+                    </span>
 
-                    <h1 className="font-display" style={{ fontSize: "2rem", fontWeight: 800, color: "#fff", letterSpacing: "-0.02em", marginBottom: "0.25rem" }}>
+                    <h1 className="trip-dest-hero-name font-display">
                       {dest.name}
                     </h1>
 
-                    <p style={{ fontSize: "0.875rem", color: "rgba(255, 255, 255, 0.85)", display: "flex", alignItems: "center", gap: "0.375rem", marginBottom: "0.875rem" }}>
+                    <p className="trip-dest-hero-location">
                       <MapPin className="w-3.5 h-3.5 text-amber-700" />
                       {[dest.state, dest.country].filter(Boolean).join(", ")}
                     </p>
 
-                    <p style={{ fontSize: "0.875rem", color: "rgba(255, 255, 255, 0.9)", lineHeight: 1.65, maxWidth: "720px" }}>
+                    <p className="trip-dest-hero-desc">
                       {dest.description}
                     </p>
                   </div>
                 </div>
               )}
 
-              {/* 4 Metric Cards (shadcn style) */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem" }}>
+              {/* 4 Metric Cards */}
+              <div className="trip-metrics-grid">
                 {[
                   {
                     label: "Total Duration",
@@ -434,15 +417,15 @@ export default function TripWorkspacePage() {
                     color: "text-orange-400",
                   },
                 ].map(({ label, value, sub, Icon, color }, i) => (
-                  <div key={i} className="card" style={{ padding: "1.25rem" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
-                      <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", fontWeight: 500 }}>{label}</span>
+                  <div key={i} className="trip-metric-card">
+                    <div className="trip-metric-header">
+                      <span className="trip-metric-label">{label}</span>
                       <Icon className={`w-4 h-4 ${color}`} />
                     </div>
-                    <p style={{ fontSize: "1.375rem", fontWeight: 700, letterSpacing: "-0.02em", fontVariantNumeric: "tabular-nums", color: "var(--color-text-primary)", marginBottom: "0.125rem" }}>
+                    <p className="trip-metric-value">
                       {value}
                     </p>
-                    <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>{sub}</p>
+                    <p className="trip-metric-sub">{sub}</p>
                   </div>
                 ))}
               </div>
@@ -450,15 +433,14 @@ export default function TripWorkspacePage() {
               {/* Timeline Preview */}
               {days.length > 0 && (
                 <div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+                  <div className="trip-timeline-header">
                     <div>
-                      <h2 style={{ fontSize: "1.25rem", fontWeight: 700, letterSpacing: "-0.02em" }}>Timeline Preview</h2>
-                      <p style={{ fontSize: "0.8125rem", color: "var(--color-text-muted)" }}>Click any day to inspect the full schedule.</p>
+                      <h2 className="trip-timeline-title">Timeline Preview</h2>
+                      <p className="trip-timeline-sub">Click any day to inspect the full schedule.</p>
                     </div>
                     <button
                       onClick={() => selectPanel("itinerary")}
-                      className="btn btn-ghost"
-                      style={{ fontSize: "0.8125rem", color: "var(--color-primary-600)" }}
+                      className="btn btn-ghost text-xs text-primary-600"
                     >
                       View full itinerary <ArrowUpRight className="w-3.5 h-3.5" />
                     </button>
@@ -471,21 +453,28 @@ export default function TripWorkspacePage() {
 
           {/* ── Itinerary Tab ─────────────────────────────────────── */}
           {selectedPanel === "itinerary" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+            <div className="trip-section">
               <SectionHeader
                 title="Day-by-Day Itinerary"
                 subtitle="Curated schedule mapped with realistic transit times, activities, meals, and rest."
               />
               {days.length > 0 ? (
-                <ItineraryTimeline
-                  days={days}
-                  selectedDayIndex={selectedDayIndex}
-                  onSelectDay={selectDay}
-                  allActivities={activities}
-                  allHotels={hotels}
-                  destinationName={dest?.name}
-                  selectedHotelId={trip?.hotels?.selected_id || hotels[0]?.id}
-                />
+                <div className="trip-itinerary-grid">
+                  <div className="min-w-0">
+                    <ItineraryTimeline
+                      days={days}
+                      selectedDayIndex={selectedDayIndex}
+                      onSelectDay={selectDay}
+                      allActivities={activities}
+                      allHotels={hotels}
+                      destinationName={dest?.name}
+                      selectedHotelId={trip?.hotels?.selected_id || hotels[0]?.id}
+                    />
+                  </div>
+                  <div className="trip-map-sticky">
+                    <TripMap points={mapPoints} />
+                  </div>
+                </div>
               ) : (
                 <EmptyState message="Designing your day-by-day journey..." isLoading={isPlanning} />
               )}
@@ -494,7 +483,7 @@ export default function TripWorkspacePage() {
 
           {/* ── Transport Tab ─────────────────────────────────────── */}
           {selectedPanel === "transport" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+            <div className="trip-section">
               <SectionHeader
                 title="Flights & Transport"
                 subtitle={trip?.transport?.provider_available ? "Compare available routes by price, time, and stops." : "Estimated routes. Connect a live provider for current prices and availability."}
@@ -513,18 +502,18 @@ export default function TripWorkspacePage() {
                       </select>
                     </label>
                   </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-                  {visibleTransports.map((leg) => (
-                    <TransportCard
-                      key={leg.id}
-                      leg={leg}
-                      onSelect={async (id) => {
-                        await api.selectTransport(tripId, id);
-                      }}
-                      isSelected={trip?.transport?.selected_intercity_id === leg.id}
-                    />
-                  ))}
-                </div>
+                  <div className="trip-transport-list">
+                    {visibleTransports.map((leg) => (
+                      <TransportCard
+                        key={leg.id}
+                        leg={leg}
+                        onSelect={async (id) => {
+                          await api.selectTransport(tripId, id);
+                        }}
+                        isSelected={trip?.transport?.selected_intercity_id === leg.id}
+                      />
+                    ))}
+                  </div>
                 </>
               ) : (
                 <EmptyState message="Searching live flight and rail routes..." isLoading={isPlanning} />
@@ -534,13 +523,13 @@ export default function TripWorkspacePage() {
 
           {/* ── Hotels Tab ────────────────────────────────────────── */}
           {selectedPanel === "hotels" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+            <div className="trip-section">
               <SectionHeader
                 title="Stays & Accommodations"
                 subtitle="Verified boutique stays matching your preferred vibe and budget."
               />
               {hotels.length > 0 ? (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))", gap: "1.25rem" }}>
+                <div className="trip-cards-grid">
                   {hotels.map((hotel) => (
                     <HotelCard
                       key={hotel.id}
@@ -560,74 +549,16 @@ export default function TripWorkspacePage() {
 
           {/* ── Activities Tab (Photo-Rich Experiences) ───────────── */}
           {selectedPanel === "activities" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+            <div className="trip-section">
               <SectionHeader
                 title="Curated Experiences & Sights"
                 subtitle="Top attractions, scenic excursions, and local dining recommendations."
               />
               {activities.length > 0 ? (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))", gap: "1.25rem" }}>
-                  {activities.map((activity) => {
-                    const photo = activity.image_url || getActivityImage(activity.name, activity.description);
-                    return (
-                      <div
-                        key={activity.id}
-                        className="card"
-                        style={{
-                          overflow: "hidden",
-                          display: "flex",
-                          flexDirection: "column",
-                        }}
-                      >
-                        {/* Photo container */}
-                        <div style={{ position: "relative", height: "150px", overflow: "hidden", background: "var(--color-bg-elevated)" }}>
-                          <TravelImage src={photo} alt={activity.name} className="w-full h-full object-cover" />
-                          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(10, 11, 15, 0.8) 0%, transparent 60%)" }} />
-
-                          {activity.rating && (
-                            <div style={{
-                              position: "absolute", top: "0.625rem", right: "0.625rem",
-                              display: "flex", alignItems: "center", gap: "0.25rem",
-                              padding: "0.2rem 0.5rem", borderRadius: "99px",
-                              background: "rgba(10, 11, 15, 0.8)", backdropFilter: "blur(6px)",
-                              border: "1px solid rgba(255, 255, 255, 0.15)",
-                            }}>
-                              <Star className="w-3 h-3 fill-orange-400 text-orange-400" />
-                              <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#fff" }}>
-                                {activity.rating.toFixed(1)}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Content */}
-                        <div style={{ padding: "1rem", flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "0.75rem" }}>
-                          <div>
-                            <h4 style={{ fontSize: "0.9375rem", fontWeight: 700, color: "var(--color-text-primary)", lineHeight: 1.3, marginBottom: "0.25rem" }}>
-                              {activity.name}
-                            </h4>
-                            <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                              <MapPin className="w-3 h-3 text-amber-700 shrink-0" />
-                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{activity.location}</span>
-                            </p>
-                            <p style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)", lineHeight: 1.6, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" }}>
-                              {activity.description}
-                            </p>
-                          </div>
-
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: "0.75rem", borderTop: "1px solid var(--color-border)", fontSize: "0.75rem" }}>
-                            <span style={{ display: "flex", alignItems: "center", gap: "0.3rem", color: "var(--color-text-muted)" }}>
-                              <Clock className="w-3.5 h-3.5" />
-                              {activity.duration_hours ? `${activity.duration_hours}h` : "Flexible"}
-                            </span>
-                            <span style={{ fontWeight: 700, color: activity.price_per_person > 0 ? "var(--color-text-primary)" : "var(--color-success)" }}>
-                              {activity.price_per_person > 0 ? `${formatINR(activity.price_per_person)}/person` : "Free Experience"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="trip-cards-grid">
+                  {activities.map((activity) => (
+                    <ActivityCard key={activity.id} activity={activity} />
+                  ))}
                 </div>
               ) : (
                 <EmptyState message="Curating top experiences and dining..." isLoading={isPlanning} />
@@ -637,7 +568,7 @@ export default function TripWorkspacePage() {
 
           {/* ── Budget Tab ────────────────────────────────────────── */}
           {selectedPanel === "budget" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", maxWidth: "600px" }}>
+            <div className="trip-section trip-section--budget">
               <SectionHeader
                 title="Itemized Budget Breakdown"
                 subtitle="Complete visibility into all expenses with zero hidden fees."
@@ -652,41 +583,29 @@ export default function TripWorkspacePage() {
 
           {/* ── Sources Tab ───────────────────────────────────────── */}
           {selectedPanel === "sources" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+            <div className="trip-section">
               <SectionHeader
                 title="Verified Data & Sources"
                 subtitle="Every pricing and flight recommendation is backed by real-time web intelligence."
               />
               {trip?.sources && trip.sources.length > 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+                <div className="trip-transport-list">
                   {trip.sources.map((source) => (
                     <a
                       key={source.id}
                       href={source.url || "#"}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="card"
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: "1rem",
-                        padding: "1rem 1.25rem",
-                        textDecoration: "none",
-                      }}
+                      className="trip-source-link"
                     >
-                      <div style={{ minWidth: 0 }}>
-                        <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {source.title}
-                        </p>
-                        <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginTop: "0.25rem" }}>
-                          {source.provider} <span style={{ margin: "0 0.25rem" }}>·</span>
-                          <span style={{ color: "var(--color-primary-500)", textTransform: "uppercase", fontSize: "0.6875rem", fontWeight: 700, letterSpacing: "0.06em" }}>
-                            {source.data_category}
-                          </span>
+                      <div className="min-w-0">
+                        <p className="trip-source-title">{source.title}</p>
+                        <p className="trip-source-meta">
+                          {source.provider} <span className="mx-1">·</span>
+                          <span className="trip-source-category">{source.data_category}</span>
                         </p>
                       </div>
-                      <ExternalLink className="w-4 h-4 shrink-0 text-gray-400" />
+                      <ExternalLink className="w-4 h-4 shrink-0 text-muted-foreground" />
                     </a>
                   ))}
                 </div>
@@ -698,7 +617,7 @@ export default function TripWorkspacePage() {
 
           {/* ── AI Copilot Tab ────────────────────────────────────── */}
           {selectedPanel === "ai" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", maxWidth: "740px" }}>
+            <div className="trip-section trip-section--ai">
               <SectionHeader
                 title="AI Trip Copilot"
                 subtitle="Fine-tune your itinerary in plain English. Ask for pace changes, cheaper stays, or custom spots."
@@ -715,24 +634,23 @@ export default function TripWorkspacePage() {
 
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <div style={{ marginBottom: "0.25rem" }}>
-      <h2 className="font-display" style={{ fontSize: "1.375rem", fontWeight: 700, letterSpacing: "-0.02em", marginBottom: subtitle ? "0.25rem" : 0 }}>
-        {title}
-      </h2>
-      {subtitle && <p style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>{subtitle}</p>}
+    <div className="trip-section-header">
+      <h2 className="trip-section-title font-display">{title}</h2>
+      {subtitle && <p className="trip-section-subtitle">{subtitle}</p>}
     </div>
   );
 }
 
 function EmptyState({ message, isLoading }: { message: string; isLoading?: boolean }) {
   return (
-    <div className="card" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "4rem 2rem", textAlign: "center", border: "1px dashed var(--color-border)", gap: "0.875rem" }}>
+    <div className="trip-empty-state">
       {isLoading ? (
-        <Loader2 className="w-7 h-7 animate-spin" style={{ color: "var(--color-primary-500)" }} />
+        <Loader2 className="w-7 h-7 animate-spin text-primary" />
       ) : (
-        <Compass className="w-7 h-7" style={{ color: "var(--color-text-muted)" }} />
+        <Compass className="w-7 h-7 text-muted-foreground" />
       )}
-      <p style={{ fontSize: "0.9375rem", color: "var(--color-text-secondary)" }}>{message}</p>
+      <p className="trip-empty-state-text">{message}</p>
     </div>
   );
 }
+

@@ -22,7 +22,7 @@ from app.core.dependencies import (
     get_train_provider,
 )
 from app.core.logging import get_logger
-from app.models.trip_state import PlanningStatus, TripState
+from app.models.trip_state import AccommodationType, PlanningStatus, TripState
 from app.providers.base import (
     FlightProvider,
     HotelProvider,
@@ -87,12 +87,23 @@ class StartPlanningRequest(BaseModel):
     currency: str | None = None
     trip_duration: str | None = None
     budget: str | None = None
+    destinations: list[str] | None = None
+    travelers: int | str | None = None
 
 
 def _missing_preflight_fields(request: StartPlanningRequest) -> list[str]:
     query = request.query.lower()
-    has_duration = bool(request.trip_duration or re.search(r"\b\d+[- ]*(?:day|days|night|nights|week|weeks)\b", query))
-    has_budget = bool(request.budget or re.search(r"(?:₹|rs\.?|inr|usd|\$|€|eur)\s*[\d,]+|(?:budget of|under)\s*(?:₹|rs\.?|inr|usd|\$|€|eur)?\s*[\d,]+|no budget|without a budget", query))
+    has_duration = bool(
+        request.trip_duration
+        or re.search(r"\b\d+[- ]*(?:day|days|night|nights|week|weeks)\b", query)
+    )
+    has_budget = bool(
+        request.budget
+        or re.search(
+            r"(?:₹|rs\.?|inr|usd|\$|€|eur)\s*[\d,]+|(?:budget of|under)\s*(?:₹|rs\.?|inr|usd|\$|€|eur)?\s*[\d,]+|no budget|without a budget|\b(budget|cheap|economical|affordable|mid.?range|moderate|comfortable|luxury|high.?end|premium|backpacker|hostel)\b",
+            query,
+        )
+    )
     missing: list[str] = []
     if not has_duration:
         missing.append("trip_duration")
@@ -154,9 +165,35 @@ async def start_planning(
         user_id=request.user_id,
         original_query=request.query,
         origin=request.home_location,
-        budget_currency=request.currency or "INR",
+        budget_currency=request.currency,
         planning_status=PlanningStatus.IDLE,
     )
+    if request.destinations:
+        state.destinations_requested = request.destinations
+    if request.trip_duration:
+        try:
+            match = re.search(r"\d+", (request.trip_duration))
+            if match:
+                state.dates.duration_days = int(match.group())
+        except (ValueError, TypeError):
+            pass
+    if request.travelers:
+        try:
+            match = re.search(r"\d+", str(request.travelers))
+            if match:
+                state.travelers.adults = int(match.group())
+        except (ValueError, TypeError):
+            pass
+    if request.budget:
+        b_clean = request.budget.lower()
+        if "lux" in b_clean:
+            state.preferences.accommodation_type = AccommodationType.LUXURY
+        elif "budget" in b_clean or "cheap" in b_clean or "hostel" in b_clean:
+            state.preferences.accommodation_type = AccommodationType.BUDGET
+        elif "mid" in b_clean or "med" in b_clean or "moderate" in b_clean:
+            state.preferences.accommodation_type = AccommodationType.MID_RANGE
+        state.preferences.raw_constraints.append(request.budget)
+
     state.conversation_history.append({"role": "user", "content": request.query})
     if request.user_id:
         memory_store.remember(request.user_id, request.query)

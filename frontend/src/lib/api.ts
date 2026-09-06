@@ -36,7 +36,7 @@ export type ItineraryItem = any;
 export type Budget = any;
 
 export const api = {
-  startPlanning: (query: string, userId?: string, profile?: { home_location?: string; home_country?: string; currency?: string; trip_duration?: string; budget?: string }) => request<StartPlanningResponse>("/api/trips/plan", { method: "POST", body: JSON.stringify({ query, user_id: userId, ...profile }) }),
+  startPlanning: (query: string, userId?: string, profile?: { home_location?: string; home_country?: string; currency?: string; trip_duration?: string; budget?: string; destinations?: string[]; travelers?: string | number }) => request<StartPlanningResponse>("/api/trips/plan", { method: "POST", body: JSON.stringify({ query, user_id: userId, ...profile }) }),
   getTrip: (tripId: string) => request<any>(`/api/trips/${tripId}`),
   selectDestination: (tripId: string, destinationId: string) => request<any>(`/api/trips/${tripId}/select-destination`, { method: "POST", body: JSON.stringify({ destination_id: destinationId }) }),
   selectTransport: (tripId: string, transportId: string) => request<any>(`/api/trips/${tripId}/select-transport`, { method: "POST", body: JSON.stringify({ transport_id: transportId }) }),

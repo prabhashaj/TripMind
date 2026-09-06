@@ -62,8 +62,8 @@ class SearchProvider(ABC):
         query: str,
         max_results: int = 10,
         search_depth: str = "basic",
-    ) -> list[dict[str, Any]]:
-        """Return list of search results: {title, url, content, score}"""
+    ) -> dict[str, Any]:
+        """Return dict with 'results' (list of dict) and 'images' (list of dict)"""
 
     @property
     @abstractmethod

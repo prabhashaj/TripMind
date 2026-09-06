@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useTripStore } from "@/store/trip-store";
 import { createTripSSEClient } from "@/lib/sse-client";
 import { AgentActionShimmer } from "@/components/AgentActionShimmer";
+import { PlanningProgressBar } from "@/components/PlanningProgressBar";
 import { DestinationCard } from "@/components/DestinationCard";
 import { api } from "@/lib/api";
 import {
@@ -88,160 +89,47 @@ export default function PlanPage() {
   const destinationChosen = Boolean(selectedDestId || tripState?.selected_destination?.id);
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "var(--color-bg-base)",
-        color: "var(--color-text-primary)",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <div className="plan-workspace">
       {/* Top bar styled according to classical theme */}
       <header className="classical-nav">
-        <div
-          style={{
-            maxWidth: "1400px",
-            margin: "0 auto",
-            padding: "0 1.5rem",
-            height: "3.75rem",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-            <Link
-              href="/"
-              className="classical-brand"
-              style={{
-                textDecoration: "none",
-                fontSize: "1.3rem",
-              }}
-            >
-              <div className="classical-brand-mark" style={{ width: "2.1rem", height: "2.1rem" }}>
+        <div className="plan-header-inner">
+          <div className="plan-header-left">
+            <Link href="/" className="classical-brand">
+              <div className="classical-brand-mark">
                 <Map className="w-3.5 h-3.5" />
               </div>
               <span>TripMind</span>
             </Link>
-            <span style={{ color: "#c5b99f", fontSize: "0.875rem" }}>/</span>
-            <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "#536071" }}>
+            <span className="plan-breadcrumb">/</span>
+            <span className="plan-breadcrumb-label">
               Multi-Agent Planning
             </span>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <div className="plan-header-right">
             {tripState?.planning_status === "awaiting_preference_answers" ? (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.5rem",
-                  padding: "0.3125rem 0.75rem",
-                  borderRadius: "99px",
-                  background: "#fdf8ee",
-                  border: "1px solid #e7d5b8",
-                }}
-              >
-                <span
-                  style={{
-                    width: "6px",
-                    height: "6px",
-                    borderRadius: "50%",
-                    background: "#a77a2b",
-                    display: "inline-block",
-                  }}
-                />
-                <span
-                  style={{
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    color: "#8a611c",
-                  }}
-                >
+              <div className="plan-status-pill plan-status-pill--waiting">
+                <span className="plan-status-dot" />
+                <span className="plan-status-text--waiting">
                   Waiting for your answers
                 </span>
               </div>
             ) : isPlanning ? (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.5rem",
-                  padding: "0.3125rem 0.75rem",
-                  borderRadius: "99px",
-                  background: "#f7f0df",
-                  border: "1px solid #d7c8ac",
-                }}
-              >
-                <span
-                  style={{
-                    width: "6px",
-                    height: "6px",
-                    borderRadius: "50%",
-                    background: "#a77a2b",
-                    boxShadow: "0 0 6px rgba(167, 122, 43, 0.4)",
-                    animation: "dot-pulse 2s infinite ease-in-out",
-                    display: "inline-block",
-                  }}
-                />
-                <span
-                  style={{
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    color: "#745115",
-                  }}
-                >
+              <div className="plan-status-pill plan-status-pill--planning">
+                <span className="plan-status-dot plan-status-dot--pulse" />
+                <span className="plan-status-text--planning">
                   Agents Planning
                 </span>
               </div>
             ) : (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.375rem",
-                  padding: "0.3125rem 0.75rem",
-                  borderRadius: "99px",
-                  background: "#eef7f0",
-                  border: "1px solid #b7dfc3",
-                }}
-              >
-                <CheckCircle2 className="w-3.5 h-3.5" style={{ color: "#1b6d39" }} />
-                <span
-                  style={{
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    color: "#1b6d39",
-                  }}
-                >
+              <div className="plan-status-pill plan-status-pill--done">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                <span className="plan-status-text--done">
                   Trip Ready
                 </span>
               </div>
             )}
-            <Link
-              href="/"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.375rem",
-                padding: "0.375rem 0.85rem",
-                borderRadius: "0.4rem",
-                fontSize: "0.8125rem",
-                fontWeight: 600,
-                color: "#1d2735",
-                border: "1px solid #d7c8ac",
-                background: "#fbf9f4",
-                textDecoration: "none",
-                transition: "all 0.15s ease",
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.background = "#f4ede0";
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.background = "#fbf9f4";
-              }}
-            >
+            <Link href="/" className="plan-new-trip-btn">
               <ArrowLeft className="w-3.5 h-3.5" />
               New trip
             </Link>
@@ -249,52 +137,17 @@ export default function PlanPage() {
         </div>
       </header>
 
-      {/* Body: centered single canvas without separate sidebar */}
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          justifyContent: "center",
-          maxWidth: "960px",
-          width: "100%",
-          margin: "0 auto",
-          padding: "2.5rem 1.5rem",
-        }}
-      >
-        <main
-          style={{
-            width: "100%",
-            minWidth: 0,
-          }}
-        >
-          {/* Shimmering agent action indicator shown directly in the flow */}
-          <div style={{ marginBottom: "1.75rem" }}>
-            <AgentActionShimmer tripId={tripId} />
-          </div>
+      {/* Body: centered single canvas */}
+      <div className="plan-body">
+        <main className="plan-main">
+          {/* Unified planning progress bar driven by real SSE agent events */}
+          <PlanningProgressBar />
+
           {/* Section header */}
-          <div style={{ marginBottom: "2rem" }}>
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.45rem",
-                padding: "0.22rem 0.65rem",
-                borderRadius: "99px",
-                background: "#f7f0df",
-                border: "1px solid #d7c8ac",
-                marginBottom: "0.75rem",
-              }}
-            >
-              <MapPin className="w-3.5 h-3.5" style={{ color: "#a77a2b" }} />
-              <span
-                style={{
-                  fontSize: "0.6875rem",
-                  fontWeight: 700,
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  color: "#8a611c",
-                }}
-              >
+          <div className="plan-section-header">
+            <div className="plan-section-badge">
+              <MapPin className="w-3.5 h-3.5 text-amber-600" />
+              <span className="plan-section-badge-text">
                 {destinationChosen
                   ? "Parallel Research Node Active"
                   : hasDestinations
@@ -304,16 +157,7 @@ export default function PlanPage() {
                   : "Multi-Agent Planning In Progress"}
               </span>
             </div>
-            <h1
-              style={{
-                fontFamily: "'Playfair Display', Georgia, serif",
-                fontSize: "1.85rem",
-                fontWeight: 700,
-                letterSpacing: "-0.01em",
-                color: "#1d2735",
-                marginBottom: "0.375rem",
-              }}
-            >
+            <h1 className="plan-section-title font-display">
               {destinationChosen
                 ? "Synthesizing Flights, Hotels & Experiences"
                 : hasDestinations
@@ -322,13 +166,7 @@ export default function PlanPage() {
                 ? "A few quick questions"
                 : "Discovering your ideal itinerary"}
             </h1>
-            <p
-              style={{
-                fontSize: "0.9rem",
-                color: "#536071",
-                lineHeight: 1.6,
-              }}
-            >
+            <p className="plan-section-sub">
               {destinationChosen
                 ? "Our parallel transport, hotel, and activity agents are searching options and verifying budget constraints."
                 : hasDestinations
@@ -341,34 +179,13 @@ export default function PlanPage() {
 
           {/* Planning error banner if any */}
           {planningError && (
-            <div
-              style={{
-                marginBottom: "1.5rem",
-                padding: "0.875rem 1rem",
-                borderRadius: "0.625rem",
-                background: "rgba(239, 68, 68, 0.1)",
-                border: "1px solid rgba(239, 68, 68, 0.3)",
-                display: "flex",
-                alignItems: "flex-start",
-                gap: "0.625rem",
-              }}
-            >
-              <AlertTriangle
-                className="w-4 h-4 shrink-0 mt-0.5"
-                style={{ color: "var(--color-error)" }}
-              />
+            <div className="plan-error-banner">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-destructive" />
               <div>
-                <p
-                  style={{
-                    fontSize: "0.875rem",
-                    fontWeight: 600,
-                    color: "var(--color-error)",
-                    marginBottom: "0.25rem",
-                  }}
-                >
+                <p className="plan-error-title">
                   Planning Issue Encountered
                 </p>
-                <p style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>
+                <p className="plan-error-body">
                   {planningError}
                 </p>
               </div>
@@ -395,7 +212,7 @@ export default function PlanPage() {
                   <div className="preference-question-item" key={question.id}>
                     <div className="question-label-row">
                       <span className="question-number">0{qIdx + 1}</span>
-                      <label className="question-prompt">{question.prompt}</label>
+                      <label className="question-prompt">{question.prompt || question.question}</label>
                     </div>
 
                     {question.options && question.options.length > 0 && (
@@ -420,7 +237,7 @@ export default function PlanPage() {
                     )}
 
                     {question.allow_text && (
-                      <div style={{ marginTop: question.options && question.options.length > 0 ? "0.25rem" : "0" }}>
+                      <div className={question.options && question.options.length > 0 ? "mt-1" : ""}>
                         <input
                           className="styled-preference-input"
                           value={answers[question.id] || ""}
@@ -457,28 +274,13 @@ export default function PlanPage() {
             </div>
           )}
 
-
           {/* Destinations grid if available and not yet selected */}
           {hasDestinations && !destinationChosen && (
             <div className="space-y-4">
-              <h2
-                style={{
-                  fontSize: "0.75rem",
-                  fontWeight: 700,
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  color: "#728095",
-                }}
-              >
+              <h2 className="plan-destinations-label">
                 Candidate Destinations
               </h2>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-                  gap: "1rem",
-                }}
-              >
+              <div className="plan-destinations-grid">
                 {destinations.map((dest) => (
                   <DestinationCard
                     key={dest.id}

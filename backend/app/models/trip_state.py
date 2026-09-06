@@ -73,9 +73,7 @@ class VerificationStatus(str, Enum):
 # Supporting Models
 # ============================================================
 
-class GeoPoint(BaseModel):
-    lat: float
-    lng: float
+
 
 
 class TravelerInfo(BaseModel):
@@ -106,7 +104,7 @@ class TripPreferences(BaseModel):
     sleep_time_latest: str | None = None   # e.g., "23:00"
     requires_accessibility: bool = False
     language_preference: str = "en"
-    currency: str = "INR"
+    currency: str | None = None
     raw_constraints: list[str] = Field(default_factory=list)
 
 
@@ -130,7 +128,8 @@ class DestinationCandidate(BaseModel):
     travel_time_hours: float | None = None
     why_it_matches: str
     match_score: float = 0.0  # 0–1
-    geo: GeoPoint | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     sources: list[str] = Field(default_factory=list)
     provenance: Literal["verified", "estimated"] = "estimated"
 
@@ -181,7 +180,8 @@ class HotelOption(BaseModel):
     rating: float | None = None
     review_count: int | None = None
     location: str
-    geo: GeoPoint | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     price_per_night: float
     total_price: float
     currency: str = "INR"
@@ -215,7 +215,8 @@ class ActivityItem(BaseModel):
     type: str  # attraction, experience, tour, museum, adventure, food, event
     description: str
     location: str
-    geo: GeoPoint | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     rating: float | None = None
     duration_hours: float | None = None
     price_per_person: float = 0.0
@@ -253,7 +254,8 @@ class ItineraryItem(BaseModel):
     title: str
     description: str | None = None
     location: str | None = None
-    geo: GeoPoint | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     duration_minutes: int | None = None
     estimated_cost: float = 0.0
     currency: str = "INR"
@@ -304,8 +306,10 @@ class BudgetBreakdown(BaseModel):
     miscellaneous: float = 0.0
     currency: str = "INR"
     line_items: list[BudgetLineItem] = Field(default_factory=list)
+    fx_rate_used: float | None = None
+    fx_rate_timestamp: datetime | None = None
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def total(self) -> float:
         return (
@@ -317,12 +321,12 @@ class BudgetBreakdown(BaseModel):
             + self.miscellaneous
         )
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def estimated_range_min(self) -> float:
         return self.total * 0.9
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def estimated_range_max(self) -> float:
         return self.total * 1.15
@@ -401,12 +405,13 @@ class TripState(BaseModel):
 
     # Extracted preferences
     origin: str | None = None
-    origin_geo: GeoPoint | None = None
+    origin_latitude: float | None = None
+    origin_longitude: float | None = None
     destinations_requested: list[str] = Field(default_factory=list)
     dates: DateRange = Field(default_factory=DateRange)
     travelers: TravelerInfo = Field(default_factory=TravelerInfo)
     budget_amount: float | None = None
-    budget_currency: str = "INR"
+    budget_currency: str | None = None
     preferences: TripPreferences = Field(default_factory=TripPreferences)
 
     # Planning results

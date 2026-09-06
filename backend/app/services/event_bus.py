@@ -56,7 +56,7 @@ async def publish_event(event: TripEvent) -> None:
     """Publish a TripEvent to Redis pub/sub or in-memory queues."""
     history = _event_history[event.trip_id]
     history.append(event)
-    del history[:-100]
+    del history[:-50]  # cap at last 50 events per trip
     is_redis = await check_redis_available()
     payload = event.model_dump_json()
 
@@ -65,18 +65,37 @@ async def publish_event(event: TripEvent) -> None:
             channel = _trip_channel(event.trip_id)
             await _redis_client.publish(channel, payload)
             logger.debug("event_published_redis", channel=channel, event_type=event.type)
-            return
         except Exception as exc:
             logger.warning("redis_publish_failed_fallback_memory", error=str(exc))
+            # Fall through to in-memory delivery so subscribers still receive the event
+            _deliver_in_memory(event)
+    else:
+        # In-memory queue distribution
+        _deliver_in_memory(event)
 
-    # In-memory queue distribution
+    # Schedule history cleanup after terminal events so memory doesn't grow unbounded.
+    # We keep the buffer alive for 30 s so any late-connecting SSE client can still
+    # replay all events before the slot is freed.
+    if event.type.value in ("trip.ready", "trip.error"):
+        asyncio.get_event_loop().call_later(
+            30, _clear_trip_history, event.trip_id
+        )
+
+
+def _deliver_in_memory(event: TripEvent) -> None:
+    """Push an event to all in-memory subscribers for a trip."""
     queues = _memory_subscribers.get(event.trip_id, [])
     for q in queues:
         try:
             q.put_nowait(event)
         except Exception:
             pass
-    logger.debug("event_published_memory", trip_id=event.trip_id, subscribers=len(queues))
+
+
+def _clear_trip_history(trip_id: str) -> None:
+    """Remove the replay buffer for a completed trip."""
+    _event_history.pop(trip_id, None)
+    logger.debug("trip_history_cleared", trip_id=trip_id)
 
 
 async def subscribe_to_trip(
@@ -86,20 +105,28 @@ async def subscribe_to_trip(
     """
     Subscribe to a trip's event channel and yield TripEvents.
     Uses Redis pub/sub if available, otherwise in-memory queue.
-    """
-    # The workflow can emit its first events before the browser opens SSE.
-    # Replay the in-process history so the UI never starts at a blank action.
-    for event in _event_history.get(trip_id, []):
-        yield event
 
+    Race-free replay strategy:
+    - For Redis: subscribe to the live channel FIRST, then replay history.
+      Any events published between the history snapshot and subscribe() completing
+      are received on the live channel, so nothing is lost.
+    - For in-memory: register the queue FIRST, then replay history.
+      Events enqueued between the queue registration and history replay will
+      simply be delivered after the replayed events, maintaining order.
+    """
     is_redis = await check_redis_available()
 
     if is_redis and _redis_client:
         try:
             pubsub = _redis_client.pubsub()
             channel = _trip_channel(trip_id)
+            # Subscribe BEFORE replaying history to close the race window.
             await pubsub.subscribe(channel)
             logger.info("sse_subscribed_redis", trip_id=trip_id, channel=channel)
+
+            # Replay buffered history so late-connecting clients see all past events.
+            for event in list(_event_history.get(trip_id, [])):
+                yield event
 
             deadline = asyncio.get_event_loop().time() + timeout_seconds
             while asyncio.get_event_loop().time() < deadline:
@@ -123,10 +150,15 @@ async def subscribe_to_trip(
         except Exception as exc:
             logger.warning("redis_subscribe_failed_fallback_memory", error=str(exc))
 
-    # Memory Queue Fallback
+    # Memory Queue Fallback:
+    # Register the queue BEFORE replaying history to close the same race window.
     queue: asyncio.Queue[TripEvent] = asyncio.Queue()
     _memory_subscribers[trip_id].append(queue)
     logger.info("sse_subscribed_memory", trip_id=trip_id)
+
+    # Replay buffered history so late-connecting clients see all past events.
+    for event in list(_event_history.get(trip_id, [])):
+        yield event
 
     try:
         deadline = asyncio.get_event_loop().time() + timeout_seconds

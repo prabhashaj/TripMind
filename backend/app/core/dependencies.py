@@ -25,9 +25,12 @@ def get_search_provider() -> SearchProvider:
     return TavilySearchProvider()
 
 
+from app.providers.flight.travelpayouts import TravelpayoutsFlightProvider
+
 @lru_cache
 def get_flight_provider() -> FlightProvider:
-    # Add Amadeus provider here when configured
+    if settings.travelpayouts_token:
+        return TravelpayoutsFlightProvider(settings.travelpayouts_token)
     return MockFlightProvider()
 
 

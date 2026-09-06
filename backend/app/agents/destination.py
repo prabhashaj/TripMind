@@ -14,6 +14,7 @@ from app.models.events import AgentName, AgentStatus, EventType, TripEvent
 from app.models.trip_state import DataSource, DestinationCandidate, TripState
 from app.providers.base import LLMProvider, SearchProvider
 from app.services.event_bus import publish_event
+from app.services.geocoding import geocode
 
 logger = get_logger(__name__)
 
@@ -86,9 +87,11 @@ async def run_destination_agent(
 
         # Aggregate results, skip failed searches
         all_results: list[dict] = []
+        all_images: list[dict] = []
         for i, result in enumerate(results_list):
-            if isinstance(result, list):
-                all_results.extend(result)
+            if isinstance(result, dict) and "results" in result:
+                all_results.extend(result["results"])
+                all_images.extend(result.get("images", []))
             else:
                 logger.warning("search_failed", query=queries[i], error=str(result))
 
@@ -120,41 +123,48 @@ async def run_destination_agent(
             reverse=True,
         )
 
-        # First, try to extract images from the main search results
         used_images: set[str] = set()
-        for destination in destinations[:5]:
-            # Look for images in search results that mention this destination
-            dest_name_lower = destination.name.lower()
-            for r in all_results:
-                if dest_name_lower in r.get("title", "").lower() or dest_name_lower in r.get("content", "").lower():
-                    image_url = r.get("image_url")
+        
+        # 1. Do dedicated image searches first
+        image_tasks = [
+            search.search(
+                f"{destination.name} {destination.state or ''} {destination.country} travel landscape photo high quality",
+                max_results=5,
+                search_depth="advanced",
+            )
+            for destination in destinations[:5]
+        ]
+        image_results = await asyncio.gather(*image_tasks, return_exceptions=True)
+        for destination, result in zip(destinations[:5], image_results):
+            if isinstance(result, dict) and "images" in result:
+                for img in result["images"]:
+                    image_url = img.get("url")
                     if image_url and image_url not in used_images:
                         destination.image_url = image_url
                         used_images.add(image_url)
                         break
 
-        # If we didn't get enough images, do dedicated image searches
-        destinations_needing_images = [d for d in destinations[:5] if not d.image_url]
-        if destinations_needing_images:
-            image_tasks = [
-                search.search(
-                    f"{destination.name} {destination.state or ''} {destination.country} travel landscape photo high quality",
-                    max_results=5,
-                    search_depth="advanced",
-                )
-                for destination in destinations_needing_images
-            ]
-            image_results = await asyncio.gather(*image_tasks, return_exceptions=True)
-            for destination, result in zip(destinations_needing_images, image_results):
-                if not isinstance(result, list):
-                    continue
-                for item in result:
-                    image_url = item.get("image_url")
-                    if image_url and image_url not in used_images:
-                        destination.image_url = image_url
-                        used_images.add(image_url)
-                        break
-
+            # 2. Fall back to generic image pool if dedicated search returns nothing
+            if not destination.image_url:
+                dest_name_lower = destination.name.lower().replace(" ", "")
+                dest_name_raw = destination.name.lower()
+                for img in all_images:
+                    desc_lower = img.get("description", "").lower()
+                    url_lower = img.get("url", "").lower()
+                    if dest_name_raw in desc_lower or dest_name_lower in url_lower:
+                        image_url = img.get("url")
+                        if image_url and image_url not in used_images:
+                            destination.image_url = image_url
+                            used_images.add(image_url)
+                            break
+                            
+        # 3. Geocode the destinations
+        geocode_tasks = [geocode(f"{dest.name}, {dest.country}") for dest in destinations]
+        coords = await asyncio.gather(*geocode_tasks, return_exceptions=True)
+        for dest, coord in zip(destinations, coords):
+            if isinstance(coord, tuple) and len(coord) == 2:
+                dest.latitude, dest.longitude = coord
+                
         state.candidate_destinations = destinations
 
         # Extract sources

@@ -2,64 +2,74 @@
 
 import { Info } from 'lucide-react';
 
+type ProvenanceTier = 'live' | 'estimated' | 'mock';
+
 interface ProvenanceBadgeProps {
-  provenance?: 'verified' | 'estimated' | string;
+  /** Raw provenance value from the backend */
+  provenance?: 'verified' | 'estimated' | 'mock' | string;
+  /** Source field — 'mock' maps to the mock tier */
+  source?: string;
   category?: 'flight' | 'train' | 'hotel' | 'activity' | 'destination' | 'general';
+  /** When true, show a one-line explanatory note below the badge */
   showNote?: boolean;
   className?: string;
 }
 
+function resolveTier(provenance?: string, source?: string): ProvenanceTier {
+  if (source === 'mock' || provenance === 'mock') return 'mock';
+  if (provenance === 'verified') return 'live';
+  return 'estimated';
+}
+
+const CATEGORY_ENTITY: Record<string, string> = {
+  flight:      'airline',
+  train:       'rail operator',
+  hotel:       'property',
+  activity:    'operator',
+  destination: 'source',
+  general:     'provider',
+};
+
+const TIER_CONFIG: Record<ProvenanceTier, { label: string; noteTemplate: (entity: string) => string }> = {
+  live: {
+    label: 'Live price',
+    noteTemplate: (entity) => `Verified live price direct from ${entity}`,
+  },
+  estimated: {
+    label: 'Estimated',
+    noteTemplate: (entity) => `Estimated fare — not yet confirmed with ${entity}`,
+  },
+  mock: {
+    label: 'Mock data',
+    noteTemplate: () => 'Mock data — connect an API key for live prices',
+  },
+};
+
 export function ProvenanceBadge({
-  provenance = 'estimated',
+  provenance,
+  source,
   category = 'general',
   showNote = false,
   className = '',
 }: ProvenanceBadgeProps) {
-  const isVerified = provenance === 'verified';
-
-  const categoryEntity =
-    category === 'flight'
-      ? 'airline'
-      : category === 'train'
-      ? 'rail operator'
-      : category === 'hotel'
-      ? 'property'
-      : category === 'activity'
-      ? 'operator'
-      : 'provider';
+  const tier = resolveTier(provenance, source);
+  const entity = CATEGORY_ENTITY[category] ?? 'provider';
+  const config = TIER_CONFIG[tier];
 
   return (
     <div className={`inline-flex flex-col gap-1 ${className}`}>
       <div
-        className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-all"
-        style={{
-          background: isVerified ? 'rgba(16, 185, 129, 0.12)' : 'rgba(245, 158, 11, 0.12)',
-          border: `1px solid ${isVerified ? 'rgba(16, 185, 129, 0.28)' : 'rgba(245, 158, 11, 0.25)'}`,
-          color: isVerified ? 'var(--color-success)' : 'var(--color-warning)',
-        }}
-        title={
-          isVerified
-            ? `Verified live price directly from ${categoryEntity}`
-            : `Estimated fare based on seasonal research — not yet live-booked with ${categoryEntity}`
-        }
+        className={`provenance-badge provenance-badge--${tier}`}
+        title={config.noteTemplate(entity)}
       >
-        <span
-          className="w-1.5 h-1.5 rounded-full"
-          style={{
-            background: isVerified ? 'var(--color-success)' : 'var(--color-warning)',
-            boxShadow: isVerified ? '0 0 6px rgba(16, 185, 129, 0.4)' : 'none',
-          }}
-        />
-        <span>{isVerified ? 'Verified Live Price' : 'Estimated Fare'}</span>
+        <span className={`provenance-dot provenance-dot--${tier}`} />
+        <span>{config.label}</span>
       </div>
 
-      {showNote && !isVerified && (
-        <p
-          className="text-[11px] flex items-center gap-1 mt-0.5"
-          style={{ color: 'var(--color-text-muted)' }}
-        >
-          <Info className="w-3 h-3 flex-shrink-0 text-amber-500/80" />
-          <span>Estimated price — not yet verified with {categoryEntity}</span>
+      {showNote && tier !== 'live' && (
+        <p className="provenance-note">
+          <Info className="w-3 h-3 flex-shrink-0 provenance-note-icon" />
+          <span>{config.noteTemplate(entity)}</span>
         </p>
       )}
     </div>

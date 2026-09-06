@@ -204,7 +204,7 @@ async def run_verification_agent(state: TripState) -> TripState:
     state.touch()
 
     event_type = EventType.VERIFICATION_COMPLETED if overall != VerificationStatus.FAILED else EventType.VERIFICATION_FAILED
-    status = AgentStatus.COMPLETED if overall == VerificationStatus.PASSED else AgentStatus.COMPLETED
+    status = AgentStatus.COMPLETED if overall != VerificationStatus.FAILED else AgentStatus.FAILED
 
     issue_msg = ""
     if failed:

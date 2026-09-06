@@ -66,6 +66,9 @@ export function TravelChat({ initialPrompt = '' }: TravelChatProps) {
   const sseRef = useRef<ReturnType<typeof createTripSSEClient> | null>(null);
 
   useEffect(() => {
+    // If we were launched with a pre-filled prompt (e.g. from ?prompt= URL param),
+    // skip the wizard and go straight to freeform chat — the user already has a
+    // specific query in mind and shouldn't be forced through a structured form.
     if (initialPrompt) {
       setInput(initialPrompt);
       setLastUserQuery(initialPrompt);
@@ -128,11 +131,13 @@ export function TravelChat({ initialPrompt = '' }: TravelChatProps) {
       }
 
       const response = await api.startPlanning(tripQuery, userId || undefined, {
-        home_location: homeLocation,
+        home_location: wizardData?.origin || homeLocation,
         home_country: homeCountry,
         currency: currency,
         budget: wizardData?.budgetStyle,
         trip_duration: wizardData?.duration,
+        destinations: wizardData?.destination ? [wizardData.destination] : undefined,
+        travelers: wizardData?.travelers,
       });
 
       const newTripId = response.trip_id;
@@ -234,6 +239,10 @@ export function TravelChat({ initialPrompt = '' }: TravelChatProps) {
       const result = await api.sendConversationMessage(userId, conversationId, text, true);
 
       if (result.planning_ready) {
+        // Use the backend-constructed planning_query (which the LLM assembled from
+        // all collected fields) rather than the raw user message — this gives the
+        // trip workflow a self-contained, unambiguous query even when the user's
+        // message was a one-word answer like "Delhi" or "7 days".
         await handleLaunchPlanning(
           result.planning_query || text,
           "I have the essentials. **Your trip brief is ready.** Planning workflow has started."
@@ -266,15 +275,42 @@ export function TravelChat({ initialPrompt = '' }: TravelChatProps) {
   const handleWizardComplete = (data: IntakeData) => {
     setShowWizard(false);
     setMessages([]); // Clear the initial text welcome message
-    const query = `Plan a trip to ${data.destination} from ${data.origin} for ${data.duration} days for ${data.travelers} persons with a ${data.budgetStyle} budget.`;
-    handleLaunchPlanning(query, "I have the essentials. **Your trip brief is ready.** Planning workflow has started.", data);
+
+    // Translate the qualitative budget style into approximate ranges so the
+    // user_preference LLM can extract a numeric budget_amount and won't ask again.
+    const budgetDescriptions: Record<string, string> = {
+      'Luxury':          'luxury budget (high-end, cost is not a concern)',
+      'Medium':          'mid-range budget (comfortable but cost-conscious)',
+      'Budget Friendly': 'budget-friendly (economical, lowest reasonable cost)',
+    };
+    const budgetText = budgetDescriptions[data.budgetStyle] ?? `${data.budgetStyle} budget`;
+
+    const query = [
+      `Plan a trip to ${data.destination}`,
+      `from ${data.origin}`,
+      `for ${data.duration} days`,
+      `for ${data.travelers} person${Number(data.travelers) !== 1 ? 's' : ''}`,
+      `with a ${budgetText}.`,
+    ].join(' ');
+
+    handleLaunchPlanning(query, "Your trip brief is ready. The planning workflow has started.", data);
   };
 
   if (showWizard) {
     return (
       <Card className="w-full h-[min(720px,80vh)] min-h-[520px] flex flex-col border-none overflow-hidden shadow-none bg-transparent">
         <div className="flex-1 flex items-center justify-center p-4 overflow-y-auto">
-          <IntakeWizard onComplete={handleWizardComplete} />
+          <div className="w-full flex flex-col items-center gap-4">
+            <IntakeWizard onComplete={handleWizardComplete} />
+            {/* Escape hatch for users who prefer to type naturally */}
+            <button
+              type="button"
+              onClick={() => setShowWizard(false)}
+              className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground transition-colors"
+            >
+              Skip — I&apos;ll describe my trip in my own words
+            </button>
+          </div>
         </div>
       </Card>
     );
@@ -324,9 +360,14 @@ export function TravelChat({ initialPrompt = '' }: TravelChatProps) {
                         : "bg-muted/50 border rounded-tl-sm text-foreground"
                     )}
                   >
-                    {renderMessage(msg.content)}
+                    {msg.role === 'assistant' && msg.planningTripId && tripState?.id === msg.planningTripId && preferenceQuestions.length > 0 ? (
+                      <span>A few details would help tailor your trip to your exact taste.</span>
+                    ) : (
+                      renderMessage(msg.content)
+                    )}
 
-                    {/* Elegant inline action pill to launch planner for this query */}
+                    {/* "Generate full itinerary" pill — only shown when assistant
+                        explicitly offered a suggested query to confirm. */}
                     {msg.role === 'assistant' && msg.suggestedTripQuery && !msg.planningTripId && (
                       <div className="mt-3 pt-3 border-t border-border/50">
                         <Button
@@ -378,7 +419,7 @@ export function TravelChat({ initialPrompt = '' }: TravelChatProps) {
                                 <div key={question.id} className="flex flex-col gap-2">
                                   <div className="flex items-start gap-2">
                                     <span className="text-xs font-bold text-muted-foreground mt-0.5">0{qIdx + 1}</span>
-                                    <label className="text-sm font-medium">{question.prompt}</label>
+                                    <label className="text-sm font-medium">{question.prompt || question.question}</label>
                                   </div>
                                   
                                   {question.options && question.options.length > 0 ? (

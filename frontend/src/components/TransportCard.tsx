@@ -143,8 +143,23 @@ export function TransportCard({ leg, onSelect, isSelected }: TransportCardProps)
         </div>
 
         {/* Provenance badge & details */}
-        <div className="mt-1 pt-3 border-t border-border flex flex-col gap-1.5">
+        <div className="mt-1 pt-3 border-t border-border flex flex-col gap-2">
           <ProvenanceBadge provenance={provenance} category={category} showNote={true} />
+          {leg.notes && (
+            <div className="text-xs text-amber-700 dark:text-amber-400 font-medium bg-amber-50 dark:bg-amber-500/10 px-3 py-2 rounded-lg border border-amber-200/50 dark:border-amber-900/50">
+              {leg.notes}
+            </div>
+          )}
+          {leg.booking_url && (
+            <a 
+              href={leg.booking_url} 
+              target="_blank" 
+              rel="noreferrer" 
+              className="text-xs font-semibold text-primary hover:underline self-start mt-0.5"
+            >
+              Verify Price & Book →
+            </a>
+          )}
         </div>
       </CardContent>
 

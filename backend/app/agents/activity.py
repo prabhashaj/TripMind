@@ -14,6 +14,7 @@ from app.models.events import AgentName, AgentStatus, EventType, TripEvent
 from app.models.trip_state import ActivityItem, DataSource, TripState
 from app.providers.base import LLMProvider, SearchProvider
 from app.services.event_bus import publish_event
+from app.services.geocoding import geocode
 
 logger = get_logger(__name__)
 
@@ -74,7 +75,7 @@ async def run_activity_agent(
     duration = state.dates.duration_days or 5
 
     # Build parallel search queries
-    queries = _build_activity_queries(destination, interests, duration, state.budget_currency)
+    queries = _build_activity_queries(destination, interests, duration, state.budget_currency or "INR")
 
     await publish_event(TripEvent(
         trip_id=state.trip_id,
@@ -92,10 +93,11 @@ async def run_activity_agent(
     results_list = await asyncio.gather(*search_tasks, return_exceptions=True)
 
     all_results: list[dict] = []
-    for r in results_list:
-        if isinstance(r, list):
-            all_results.extend(r)
-            for item in r:
+    for i, result in enumerate(results_list):
+        if isinstance(result, dict) and "results" in result:
+            items = result["results"]
+            all_results.extend(items)
+            for item in items:
                 if isinstance(item, dict) and item.get("url"):
                     state.add_source(DataSource(
                         title=str(item.get("title") or item.get("url") or "Activity Source"),
@@ -147,7 +149,7 @@ async def run_activity_agent(
                     rating=item.get("rating"),
                     duration_hours=item.get("duration_hours"),
                     price_per_person=item.get("price_per_person") or 0.0,
-                    currency=state.budget_currency,
+                    currency=state.budget_currency or "INR",
                     opening_hours=item.get("opening_hours"),
                     source="Tavily Search",
                     retrieved_at=datetime.now(timezone.utc),
@@ -167,15 +169,23 @@ async def run_activity_agent(
         ]
         image_results = await asyncio.gather(*image_tasks, return_exceptions=True)
         used_images: set[str] = set()
-        for activity, result in zip(activities, image_results):
-            if not isinstance(result, list):
+        for activity, result in zip(activities[:8], image_results):
+            if not isinstance(result, dict) or "images" not in result:
                 continue
-            for item in result:
-                image_url = item.get("image_url")
+            for item in result["images"]:
+                image_url = item.get("url")
                 if image_url and image_url not in used_images:
                     activity.image_url = image_url
                     used_images.add(image_url)
                     break
+
+        # Geocode activities
+        if activities:
+            geocode_tasks = [geocode(f"{activity.name}, {activity.location}") for activity in activities]
+            coords = await asyncio.gather(*geocode_tasks, return_exceptions=True)
+            for activity, coord in zip(activities, coords):
+                if isinstance(coord, tuple) and len(coord) == 2:
+                    activity.latitude, activity.longitude = coord
 
         state.activities = activities
         state.touch()
