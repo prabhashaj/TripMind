@@ -262,6 +262,18 @@ async def run_hotel_agent(
     if not all_hotels and mock_fallback_hotels:
         all_hotels.extend(mock_fallback_hotels)
 
+    if state.budget_amount and nights > 0:
+        ceiling_per_night = (state.budget_amount * 0.5) / nights
+        affordable = []
+        expensive = []
+        for h in all_hotels:
+            if h.price_per_night > ceiling_per_night:
+                h.fit_reason = "This is above your typical budget for this trip"
+                expensive.append(h)
+            else:
+                affordable.append(h)
+        all_hotels = affordable + expensive
+
     # Geocode all hotels
     if all_hotels:
         geocode_tasks = [geocode(f"{hotel.name}, {hotel.location}") for hotel in all_hotels]

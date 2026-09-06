@@ -103,6 +103,18 @@ class MockTrainProvider(TrainProvider):
         passengers: int = 1,
         currency: str = "INR",
     ) -> list[TransportLeg]:
+        CITY_TO_COUNTRY = {
+            "delhi": "india", "mumbai": "india", "bangalore": "india", 
+            "chennai": "india", "hyderabad": "india", "kolkata": "india",
+            "london": "uk", "new york": "usa", "paris": "france", "tokyo": "japan",
+            "dubai": "uae", "singapore": "singapore", "sydney": "australia", 
+            "toronto": "canada", "melbourne": "australia"
+        }
+        o_c = CITY_TO_COUNTRY.get(origin.lower().strip())
+        d_c = CITY_TO_COUNTRY.get(destination.lower().strip())
+        if o_c and d_c and o_c != d_c:
+            return []
+
         departure = datetime.fromisoformat(departure_date + "T07:00:00")
         base_price = 1200.0 * passengers
 

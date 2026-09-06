@@ -196,6 +196,7 @@ class HotelOption(BaseModel):
     booking_url: str | None = None
     is_available: bool = True
     provenance: Literal["verified", "estimated"] = "estimated"
+    fit_reason: str | None = None
 
 
 class HotelOptions(BaseModel):

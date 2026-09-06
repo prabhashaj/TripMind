@@ -11,7 +11,7 @@ import { ActivityCard } from "@/components/ActivityCard";
 import { ItineraryTimeline } from "@/components/ItineraryTimeline";
 import { BudgetCard } from "@/components/BudgetCard";
 import { AskAIPanel } from "@/components/AskAIPanel";
-import { computeBudgetTotal, formatINR } from "@/lib/utils";
+import { computeBudgetTotal, formatCurrency } from "@/lib/utils";
 import {
   LayoutDashboard,
   CalendarDays,
@@ -38,7 +38,7 @@ import {
 import Link from "next/link";
 import { TravelImage } from "@/components/TravelImage";
 import { AgentActionShimmer } from "@/components/AgentActionShimmer";
-import { TripMap, type MapPoint } from "@/components/TripMap";
+import { InteractiveTripMap } from "@/components/InteractiveTripMap";
 
 const NAV_ITEMS = [
   { key: "overview", label: "Overview", icon: LayoutDashboard },
@@ -149,51 +149,6 @@ export default function TripWorkspacePage() {
     }
   };
 
-  const mapPoints: MapPoint[] = [];
-  days.forEach((day, idx) => {
-    if (selectedDayIndex !== null && selectedDayIndex !== idx) return;
-    day.items.forEach((item) => {
-      let lat = undefined;
-      let lng = undefined;
-      let type: "hotel" | "activity" | "destination" | undefined = undefined;
-
-      if (item.hotel_id) {
-        const h = hotels.find((x) => x.id === item.hotel_id);
-        if (h && h.latitude && h.longitude) {
-          lat = h.latitude;
-          lng = h.longitude;
-          type = "hotel";
-        }
-      } else if (item.activity_id) {
-        const a = activities.find((x) => x.id === item.activity_id);
-        if (a && a.latitude && a.longitude) {
-          lat = a.latitude;
-          lng = a.longitude;
-          type = "activity";
-        }
-      }
-
-      if (lat !== undefined && lng !== undefined && type) {
-        mapPoints.push({
-          id: item.id,
-          name: item.title,
-          lat,
-          lng,
-          type,
-          day_index: day.day_number,
-        });
-      }
-    });
-  });
-  if (mapPoints.length === 0 && dest?.latitude && dest?.longitude) {
-    mapPoints.push({
-      id: dest.id || "dest",
-      name: dest.name,
-      lat: dest.latitude,
-      lng: dest.longitude,
-      type: "destination",
-    });
-  }
 
   return (
     <div className="trip-workspace">
@@ -225,7 +180,7 @@ export default function TripWorkspacePage() {
                   {trip.budget_amount ? (
                     <>
                       <span>•</span>
-                      <span>Target: {formatINR(trip.budget_amount)}</span>
+                      <span>Target: {formatCurrency(trip.budget_amount, trip.budget_currency)}</span>
                     </>
                   ) : null}
                 </p>
@@ -253,7 +208,7 @@ export default function TripWorkspacePage() {
             {/* Total Budget Pill */}
             <div className={`trip-budget-pill ${isOverBudget ? "trip-budget-pill--over" : ""}`}>
               <p className={`trip-budget-amount ${isOverBudget ? "trip-budget-amount--over" : ""}`}>
-                {formatINR(totalCost)}
+                {formatCurrency(totalCost, trip?.budget_currency)}
               </p>
               <p className="trip-budget-label">
                 {targetBudget > 0 ? (isOverBudget ? "Over Budget" : "Est. Total") : "Est. Total"}
@@ -404,8 +359,8 @@ export default function TripWorkspacePage() {
                   },
                   {
                     label: "Budget Estimate",
-                    value: formatINR(totalCost),
-                    sub: targetBudget > 0 ? `Target: ${formatINR(targetBudget)}` : "All inclusive",
+                    value: formatCurrency(totalCost, trip?.budget_currency),
+                    sub: targetBudget > 0 ? `Target: ${formatCurrency(targetBudget, trip?.budget_currency)}` : "All inclusive",
                     Icon: Wallet,
                     color: "text-emerald-400",
                   },
@@ -472,7 +427,12 @@ export default function TripWorkspacePage() {
                     />
                   </div>
                   <div className="trip-map-sticky">
-                    <TripMap points={mapPoints} />
+                    <InteractiveTripMap 
+                      destinationName={dest?.name}
+                      day={selectedDayIndex !== null ? days[selectedDayIndex] : days[0]}
+                      hotels={hotels}
+                      selectedHotelId={trip?.hotels?.selected_id || hotels[0]?.id}
+                    />
                   </div>
                 </div>
               ) : (

@@ -141,14 +141,34 @@ async def run_activity_agent(
         activities = []
         for item in extraction.activities:
             try:
+                price_raw = item.get("price_per_person")
+                if isinstance(price_raw, str):
+                    import re
+                    match = re.search(r"[\d,]+(?:\.\d+)?", price_raw)
+                    if match:
+                        price_raw = float(match.group(0).replace(",", ""))
+                    else:
+                        price_raw = 0.0
+                try:
+                    price = float(price_raw or 0.0)
+                except (ValueError, TypeError):
+                    price = 0.0
+
+                try:
+                    rating = float(item.get("rating") or 0)
+                    if rating == 0:
+                        rating = None
+                except (ValueError, TypeError):
+                    rating = None
+
                 activity = ActivityItem(
                     name=item.get("name", ""),
                     type=item.get("type", "attraction"),
                     description=item.get("description", ""),
                     location=item.get("location", destination),
-                    rating=item.get("rating"),
-                    duration_hours=item.get("duration_hours"),
-                    price_per_person=item.get("price_per_person") or 0.0,
+                    rating=rating,
+                    duration_hours=float(item.get("duration_hours") or 2.0),
+                    price_per_person=price,
                     currency=state.budget_currency or "INR",
                     opening_hours=item.get("opening_hours"),
                     source="Tavily Search",
@@ -156,7 +176,8 @@ async def run_activity_agent(
                     tags=item.get("tags", []),
                 )
                 activities.append(activity)
-            except Exception:
+            except Exception as e:
+                logger.error(f"Failed to parse activity {item}: {e}")
                 continue
 
         image_tasks = [

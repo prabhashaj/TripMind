@@ -63,6 +63,18 @@ async def run_transport_agent(
         message="Searching flight and train options simultaneously",
     ))
 
+    CITY_TO_COUNTRY = {
+        "delhi": "india", "mumbai": "india", "bangalore": "india", 
+        "chennai": "india", "hyderabad": "india", "kolkata": "india",
+        "london": "uk", "new york": "usa", "paris": "france", "tokyo": "japan",
+        "dubai": "uae", "singapore": "singapore", "sydney": "australia", 
+        "toronto": "canada", "melbourne": "australia"
+    }
+    
+    o_c = CITY_TO_COUNTRY.get(origin.lower().strip())
+    d_c = CITY_TO_COUNTRY.get(destination.lower().strip())
+    is_domestic = o_c and d_c and o_c == d_c
+
     flight_task = flight_provider.search_flights(
         origin=origin,
         destination=destination,
@@ -70,17 +82,21 @@ async def run_transport_agent(
         adults=state.travelers.adults,
         currency=state.budget_currency or "INR",
     )
-    train_task = train_provider.search_trains(
-        origin=origin,
-        destination=destination,
-        departure_date=departure_date,
-        passengers=state.travelers.total,
-        currency=state.budget_currency or "INR",
-    )
-
-    flight_results, train_results = await asyncio.gather(
-        flight_task, train_task, return_exceptions=True
-    )
+    
+    if is_domestic:
+        train_task = train_provider.search_trains(
+            origin=origin,
+            destination=destination,
+            departure_date=departure_date,
+            passengers=state.travelers.total,
+            currency=state.budget_currency or "INR",
+        )
+        flight_results, train_results = await asyncio.gather(
+            flight_task, train_task, return_exceptions=True
+        )
+    else:
+        flight_results = await flight_task
+        train_results = []
 
     if isinstance(flight_results, list):
         intercity_legs.extend(flight_results)

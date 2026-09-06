@@ -29,7 +29,7 @@ CITY_TO_IATA = {
 class TravelpayoutsFlightProvider(FlightProvider):
     def __init__(self, token: str):
         self.token = token
-        self.base_url = "http://api.travelpayouts.com/aviasales/v3/get_latest_prices"
+        self.base_url = "https://api.travelpayouts.com/aviasales/v3/get_latest_prices"
 
     def _get_iata(self, city: str) -> str:
         # Very simple fallback for IATA conversion

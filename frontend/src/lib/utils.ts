@@ -5,8 +5,19 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function formatINR(amount = 0) {
-  return `₹${Math.round(amount).toLocaleString("en-IN")}`;
+export function formatCurrency(amount = 0, currencyCode = "INR") {
+  const code = currencyCode.toUpperCase();
+  const symbolMap: Record<string, string> = {
+    INR: "₹",
+    USD: "$",
+    EUR: "€",
+    GBP: "£",
+    AUD: "A$",
+    AED: "AED ",
+  };
+  const symbol = symbolMap[code] || `${code} `;
+  const formattedAmount = Math.round(amount).toLocaleString();
+  return `${symbol}${formattedAmount}`;
 }
 
 export function computeBudgetTotal(budget: any) {

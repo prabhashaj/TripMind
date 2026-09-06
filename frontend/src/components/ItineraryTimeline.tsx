@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { ItineraryDay, ItineraryItem, Activity, HotelOption } from '@/lib/api';
-import { formatINR } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 import {
   Clock,
   MapPin,
@@ -176,7 +176,7 @@ export function ItineraryTimeline({
                   </span>
                   {day.total_cost > 0 && (
                     <span className="text-xs font-bold font-mono text-emerald-400">
-                      Est. Spend: {formatINR(day.total_cost)}
+                      Est. Spend: {formatCurrency(day.total_cost)}
                     </span>
                   )}
                 </div>
@@ -251,7 +251,7 @@ export function ItineraryTimeline({
                               <div className="flex items-center gap-2">
                                 {item.estimated_cost > 0 && (
                                   <span className="text-xs font-bold font-mono text-white">
-                                    {formatINR(item.estimated_cost)}
+                                    {formatCurrency(item.estimated_cost)}
                                   </span>
                                 )}
 
