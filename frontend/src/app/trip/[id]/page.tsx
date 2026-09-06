@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { TravelImage } from "@/components/TravelImage";
+import { AgentActionShimmer } from "@/components/AgentActionShimmer";
 
 const NAV_ITEMS = [
   { key: "overview", label: "Overview", icon: LayoutDashboard },
@@ -150,19 +151,19 @@ export default function TripWorkspacePage() {
     <div style={{ minHeight: "100vh", background: "var(--color-bg-base)", color: "var(--color-text-primary)", display: "flex", flexDirection: "column" }}>
 
       {/* ── Top Header Bar ────────────────────────────────────────── */}
-      <header style={{ borderBottom: "1px solid var(--color-border)", background: "rgba(255, 255, 255 / 0.92)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 1.5rem", height: "3.75rem", gap: "1rem" }}>
+      <header className="classical-nav">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 1.5rem", height: "3.75rem", gap: "1rem", maxWidth: "1400px", margin: "0 auto" }}>
 
           {/* Left: Brand & Destination */}
           <div style={{ display: "flex", alignItems: "center", gap: "1rem", minWidth: 0 }}>
-            <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.5rem", textDecoration: "none", flexShrink: 0 }}>
-              <div style={{ width: "1.875rem", height: "1.875rem", borderRadius: "0.5rem", background: "var(--color-primary-500)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 12px -2px rgba(139, 92, 246 / 0.5)" }}>
-                <Map className="w-3.5 h-3.5 text-white" />
+            <Link href="/" className="classical-brand" style={{ textDecoration: "none", fontSize: "1.3rem" }}>
+              <div className="classical-brand-mark" style={{ width: "2.1rem", height: "2.1rem" }}>
+                <Map className="w-3.5 h-3.5" />
               </div>
-              <span style={{ fontWeight: 700, fontSize: "0.9375rem", letterSpacing: "-0.02em" }}>TripMind</span>
+              <span>TripMind</span>
             </Link>
 
-            <span style={{ color: "var(--color-border-strong)" }}>/</span>
+            <span style={{ color: "#c5b99f" }}>/</span>
 
             <div style={{ minWidth: 0 }}>
               <p style={{ fontSize: "0.9375rem", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", letterSpacing: "-0.01em" }}>
@@ -188,8 +189,7 @@ export default function TripWorkspacePage() {
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexShrink: 0 }}>
             {isPlanning && (
               <div style={{ display: "flex", alignItems: "center", gap: "0.4375rem", padding: "0.3125rem 0.75rem", borderRadius: "99px", background: "rgba(139, 92, 246 / 0.15)", border: "1px solid rgba(139, 92, 246 / 0.3)" }}>
-                <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: "var(--color-primary-500)" }} />
-                <span style={{ fontSize: "0.75rem", color: "var(--color-primary-600)", fontWeight: 600 }}>Optimizing</span>
+                <AgentActionShimmer compact />
               </div>
             )}
 
@@ -216,6 +216,17 @@ export default function TripWorkspacePage() {
                 {targetBudget > 0 ? (isOverBudget ? "Over Budget" : "Est. Total") : "Est. Total"}
               </p>
             </div>
+
+            {/* Export / Print PDF */}
+            <button
+              onClick={() => typeof window !== "undefined" && window.print()}
+              className="btn btn-ghost"
+              style={{ fontSize: "0.8125rem", padding: "0.375rem 0.625rem" }}
+              title="Print or Save Itinerary as PDF"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Export PDF</span>
+            </button>
 
             {/* Share */}
             <button
@@ -466,7 +477,15 @@ export default function TripWorkspacePage() {
                 subtitle="Curated schedule mapped with realistic transit times, activities, meals, and rest."
               />
               {days.length > 0 ? (
-                <ItineraryTimeline days={days} selectedDayIndex={selectedDayIndex} onSelectDay={selectDay} />
+                <ItineraryTimeline
+                  days={days}
+                  selectedDayIndex={selectedDayIndex}
+                  onSelectDay={selectDay}
+                  allActivities={activities}
+                  allHotels={hotels}
+                  destinationName={dest?.name}
+                  selectedHotelId={trip?.hotels?.selected_id || hotels[0]?.id}
+                />
               ) : (
                 <EmptyState message="Designing your day-by-day journey..." isLoading={isPlanning} />
               )}

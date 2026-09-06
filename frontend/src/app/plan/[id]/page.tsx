@@ -4,11 +4,17 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useTripStore } from "@/store/trip-store";
 import { createTripSSEClient } from "@/lib/sse-client";
-import { AgentActivityPanel } from "@/components/AgentActivityPanel";
+import { AgentActionShimmer } from "@/components/AgentActionShimmer";
 import { DestinationCard } from "@/components/DestinationCard";
 import { api } from "@/lib/api";
 import {
-  ArrowLeft, Sparkles, MapPin, AlertTriangle, Loader2, CheckCircle2, Map,
+  ArrowLeft,
+  ArrowRight,
+  Sparkles,
+  MapPin,
+  AlertTriangle,
+  CheckCircle2,
+  Map,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -16,22 +22,55 @@ export default function PlanPage() {
   const params = useParams();
   const router = useRouter();
   const tripId = params.id as string;
-  const { tripState, isPlanning, planningError, preferenceQuestions, setTripId, handleEvent } = useTripStore();
+  const {
+    tripState,
+    isPlanning,
+    planningError,
+    preferenceQuestions,
+  } = useTripStore();
   const sseRef = useRef<ReturnType<typeof createTripSSEClient> | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [selectedDestId, setSelectedDestId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!tripId) return;
-    setTripId(tripId);
-    api.getTrip(tripId).then((state) => useTripStore.getState().setTripState(state)).catch(console.error);
+    useTripStore.getState().setTripId(tripId);
+    api
+      .getTrip(tripId)
+      .then((state) => {
+        useTripStore.getState().setTripState(state);
+        if (state.selected_destination?.id) {
+          setSelectedDestId(state.selected_destination.id);
+        }
+      })
+      .catch(console.error);
+
     const client = createTripSSEClient(tripId);
     sseRef.current = client;
-    client.on("*", handleEvent).on("trip.ready", () => { setTimeout(() => router.push(`/trip/${tripId}`), 1200); }).connect();
-    return () => client.disconnect();
-  }, [tripId, router, setTripId, handleEvent]);
+
+    client
+      .on("*", (event) => {
+        useTripStore.getState().handleEvent(event);
+      })
+      .on("trip.ready", () => {
+        setTimeout(() => router.push(`/trip/${tripId}`), 1000);
+      })
+      .connect();
+
+    return () => {
+      client.disconnect();
+      sseRef.current = null;
+    };
+  }, [tripId, router]);
 
   const handleSelectDestination = async (destinationId: string) => {
-    try { await api.selectDestination(tripId, destinationId); } catch (err) { console.error(err); }
+    setSelectedDestId(destinationId);
+    try {
+      await api.selectDestination(tripId, destinationId);
+      useTripStore.setState({ isPlanning: true });
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const submitPreferences = async () => {
@@ -46,42 +85,163 @@ export default function PlanPage() {
 
   const destinations = tripState?.candidate_destinations || [];
   const hasDestinations = destinations.length > 0;
+  const destinationChosen = Boolean(selectedDestId || tripState?.selected_destination?.id);
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--color-bg-base)", color: "var(--color-text-primary)", display: "flex", flexDirection: "column" }}>
-
-      {/* Top bar */}
-      <header style={{ borderBottom: "1px solid var(--color-border)", background: "rgba(255, 255, 255, 0.95)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "0 1.5rem", height: "3.5rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "var(--color-bg-base)",
+        color: "var(--color-text-primary)",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {/* Top bar styled according to classical theme */}
+      <header className="classical-nav">
+        <div
+          style={{
+            maxWidth: "1400px",
+            margin: "0 auto",
+            padding: "0 1.5rem",
+            height: "3.75rem",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
           <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-            <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.5rem", textDecoration: "none" }}>
-              <div style={{ width: "1.75rem", height: "1.75rem", borderRadius: "0.4375rem", background: "var(--gradient-primary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <Map className="w-3.5 h-3.5 text-white" />
+            <Link
+              href="/"
+              className="classical-brand"
+              style={{
+                textDecoration: "none",
+                fontSize: "1.3rem",
+              }}
+            >
+              <div className="classical-brand-mark" style={{ width: "2.1rem", height: "2.1rem" }}>
+                <Map className="w-3.5 h-3.5" />
               </div>
-              <span style={{ fontWeight: 700, fontSize: "0.9375rem", letterSpacing: "-0.02em", color: "var(--color-text-primary)" }}>TripMind</span>
+              <span>TripMind</span>
             </Link>
-            <span style={{ color: "var(--color-border-strong)", fontSize: "0.875rem" }}>/</span>
-            <span style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>Planning</span>
+            <span style={{ color: "#c5b99f", fontSize: "0.875rem" }}>/</span>
+            <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "#536071" }}>
+              Multi-Agent Planning
+            </span>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
             {tripState?.planning_status === "awaiting_preference_answers" ? (
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.3125rem 0.75rem", borderRadius: "99px", background: "var(--color-primary-50)", border: "1px solid var(--color-primary-200)" }}>
-                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--color-primary-500)", display: "inline-block" }} />
-                <span style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--color-primary-600)" }}>Waiting for your answers</span>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                  padding: "0.3125rem 0.75rem",
+                  borderRadius: "99px",
+                  background: "#fdf8ee",
+                  border: "1px solid #e7d5b8",
+                }}
+              >
+                <span
+                  style={{
+                    width: "6px",
+                    height: "6px",
+                    borderRadius: "50%",
+                    background: "#a77a2b",
+                    display: "inline-block",
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    color: "#8a611c",
+                  }}
+                >
+                  Waiting for your answers
+                </span>
               </div>
             ) : isPlanning ? (
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.3125rem 0.75rem", borderRadius: "99px", background: "var(--color-primary-50)", border: "1px solid var(--color-primary-200)" }}>
-                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--color-primary-500)", boxShadow: "0 0 6px var(--color-primary-500)", animation: "dot-pulse 2.5s infinite ease-in-out", display: "inline-block" }} />
-                <span style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--color-primary-600)" }}>Agents working</span>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                  padding: "0.3125rem 0.75rem",
+                  borderRadius: "99px",
+                  background: "#f7f0df",
+                  border: "1px solid #d7c8ac",
+                }}
+              >
+                <span
+                  style={{
+                    width: "6px",
+                    height: "6px",
+                    borderRadius: "50%",
+                    background: "#a77a2b",
+                    boxShadow: "0 0 6px rgba(167, 122, 43, 0.4)",
+                    animation: "dot-pulse 2s infinite ease-in-out",
+                    display: "inline-block",
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    color: "#745115",
+                  }}
+                >
+                  Agents Planning
+                </span>
               </div>
             ) : (
-              <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.3125rem 0.75rem", borderRadius: "99px", background: "rgba(16, 185, 129, 0.12)", border: "1px solid rgba(16, 185, 129, 0.25)" }}>
-                <CheckCircle2 className="w-3.5 h-3.5" style={{ color: "var(--color-success)" }} />
-                <span style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--color-success)" }}>Complete</span>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.375rem",
+                  padding: "0.3125rem 0.75rem",
+                  borderRadius: "99px",
+                  background: "#eef7f0",
+                  border: "1px solid #b7dfc3",
+                }}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" style={{ color: "#1b6d39" }} />
+                <span
+                  style={{
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    color: "#1b6d39",
+                  }}
+                >
+                  Trip Ready
+                </span>
               </div>
             )}
-            <Link href="/" style={{ display: "inline-flex", alignItems: "center", gap: "0.375rem", padding: "0.375rem 0.75rem", borderRadius: "0.5rem", fontSize: "0.8125rem", fontWeight: 500, color: "var(--color-text-secondary)", border: "1px solid var(--color-border)", background: "transparent", textDecoration: "none", transition: "all 0.15s" }}>
+            <Link
+              href="/"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.375rem",
+                padding: "0.375rem 0.85rem",
+                borderRadius: "0.4rem",
+                fontSize: "0.8125rem",
+                fontWeight: 600,
+                color: "#1d2735",
+                border: "1px solid #d7c8ac",
+                background: "#fbf9f4",
+                textDecoration: "none",
+                transition: "all 0.15s ease",
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = "#f4ede0";
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = "#fbf9f4";
+              }}
+            >
               <ArrowLeft className="w-3.5 h-3.5" />
               New trip
             </Link>
@@ -89,143 +249,249 @@ export default function PlanPage() {
         </div>
       </header>
 
-      {/* Body: sidebar + canvas */}
-      <div style={{ flex: 1, display: "flex", maxWidth: "1400px", width: "100%", margin: "0 auto", padding: "0 1.5rem" }}>
-
-        {/* Sidebar */}
-        <aside style={{ width: "280px", flexShrink: 0, paddingTop: "1.5rem", paddingRight: "1.5rem", paddingBottom: "1.5rem", position: "sticky", top: "3.5rem", height: "calc(100vh - 3.5rem)", overflowY: "auto", borderRight: "1px solid var(--color-border)", display: "flex", flexDirection: "column", gap: "1rem" }}>
-
-          {/* Query card */}
-          <div style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)", borderRadius: "0.75rem", padding: "0.875rem" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
-              <Sparkles className="w-3.5 h-3.5" style={{ color: "var(--color-primary-500)", flexShrink: 0 }} />
-              <span style={{ fontSize: "0.6875rem", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-muted)" }}>Your request</span>
-            </div>
-            <p style={{ fontSize: "0.8125rem", lineHeight: 1.6, color: "var(--color-text-secondary)" }}>
-              {tripState?.original_query || "Launching agents..."}
-            </p>
+      {/* Body: centered single canvas without separate sidebar */}
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          justifyContent: "center",
+          maxWidth: "960px",
+          width: "100%",
+          margin: "0 auto",
+          padding: "2.5rem 1.5rem",
+        }}
+      >
+        <main
+          style={{
+            width: "100%",
+            minWidth: 0,
+          }}
+        >
+          {/* Shimmering agent action indicator shown directly in the flow */}
+          <div style={{ marginBottom: "1.75rem" }}>
+            <AgentActionShimmer tripId={tripId} />
           </div>
-
-          {/* Agent panel */}
-          <div style={{ flex: 1 }}>
-            <AgentActivityPanel />
-          </div>
-        </aside>
-
-        {/* Main canvas */}
-        <main style={{ flex: 1, paddingTop: "2rem", paddingLeft: "2rem", paddingBottom: "2rem", minWidth: 0 }}>
-
           {/* Section header */}
           <div style={{ marginBottom: "2rem" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.625rem" }}>
-              <MapPin className="w-3.5 h-3.5" style={{ color: "var(--color-primary-500)" }} />
-              <span style={{ fontSize: "0.6875rem", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--color-primary-500)" }}>
-                {hasDestinations ? "Destinations found" : preferenceQuestions.length > 0 ? "Details needed" : "Searching destinations"}
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.45rem",
+                padding: "0.22rem 0.65rem",
+                borderRadius: "99px",
+                background: "#f7f0df",
+                border: "1px solid #d7c8ac",
+                marginBottom: "0.75rem",
+              }}
+            >
+              <MapPin className="w-3.5 h-3.5" style={{ color: "#a77a2b" }} />
+              <span
+                style={{
+                  fontSize: "0.6875rem",
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "#8a611c",
+                }}
+              >
+                {destinationChosen
+                  ? "Parallel Research Node Active"
+                  : hasDestinations
+                  ? "Destinations Discovered"
+                  : preferenceQuestions.length > 0
+                  ? "Details Needed"
+                  : "Multi-Agent Planning In Progress"}
               </span>
             </div>
-            <h1 style={{ fontSize: "1.5rem", fontWeight: 700, letterSpacing: "-0.025em", marginBottom: "0.375rem" }}>
-              {hasDestinations ? "Choose your destination" : preferenceQuestions.length > 0 ? "Tell us a little more first" : "Discovering your perfect destination"}
+            <h1
+              style={{
+                fontFamily: "'Playfair Display', Georgia, serif",
+                fontSize: "1.85rem",
+                fontWeight: 700,
+                letterSpacing: "-0.01em",
+                color: "#1d2735",
+                marginBottom: "0.375rem",
+              }}
+            >
+              {destinationChosen
+                ? "Synthesizing Flights, Hotels & Experiences"
+                : hasDestinations
+                ? "Select your destination"
+                : preferenceQuestions.length > 0
+                ? "A few quick questions"
+                : "Discovering your ideal itinerary"}
             </h1>
-            <p style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
-              {hasDestinations
-                ? `${destinations.length} destinations matched your preferences. Select one to continue planning.`
-                : preferenceQuestions.length > 0 ? "Answer these essentials and the agents will begin your research." : "AI agents are researching destinations, flights, hotels, and activities in real time."}
+            <p
+              style={{
+                fontSize: "0.9rem",
+                color: "#536071",
+                lineHeight: 1.6,
+              }}
+            >
+              {destinationChosen
+                ? "Our parallel transport, hotel, and activity agents are searching options and verifying budget constraints."
+                : hasDestinations
+                ? `${destinations.length} destinations matched your preferences. Select one to proceed to detailed research.`
+                : preferenceQuestions.length > 0
+                ? "Answer these questions so our agents can personalize your recommendations."
+                : "LangGraph agents are evaluating routes, seasonal weather, accommodations, and curated activities in real time."}
             </p>
           </div>
 
-          {/* Error */}
+          {/* Planning error banner if any */}
           {planningError && (
-            <div style={{ marginBottom: "1.5rem", padding: "0.875rem 1rem", borderRadius: "0.625rem", background: "rgba(239, 68, 68 / 0.1)", border: "1px solid rgba(239, 68, 68 / 0.3)", display: "flex", alignItems: "flex-start", gap: "0.625rem" }}>
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "var(--color-error)" }} />
+            <div
+              style={{
+                marginBottom: "1.5rem",
+                padding: "0.875rem 1rem",
+                borderRadius: "0.625rem",
+                background: "rgba(239, 68, 68, 0.1)",
+                border: "1px solid rgba(239, 68, 68, 0.3)",
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "0.625rem",
+              }}
+            >
+              <AlertTriangle
+                className="w-4 h-4 shrink-0 mt-0.5"
+                style={{ color: "var(--color-error)" }}
+              />
               <div>
-                <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-error)", marginBottom: "0.25rem" }}>Planning issue</p>
-                <p style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>{planningError}</p>
+                <p
+                  style={{
+                    fontSize: "0.875rem",
+                    fontWeight: 600,
+                    color: "var(--color-error)",
+                    marginBottom: "0.25rem",
+                  }}
+                >
+                  Planning Issue Encountered
+                </p>
+                <p style={{ fontSize: "0.8125rem", color: "var(--color-error)" }}>
+                  {planningError}
+                </p>
               </div>
             </div>
           )}
 
+          {/* Preference questions form if any */}
           {preferenceQuestions.length > 0 && (
-            <div className="preference-questions">
-              <div className="preference-questions-heading">
-                <Sparkles className="w-4 h-4" />
-                <div><strong>One more thing from your Preference Agent</strong><p>Choose what feels right. We will use it to tune the recommendations.</p></div>
-              </div>
-              {preferenceQuestions.map((question) => (
-                <div className="preference-question" key={question.id}>
-                  <strong>{question.prompt}</strong>
-                  <div className="option-row">{question.options.map((option) => <button key={option} type="button" className={`choice ${answers[question.id] === option ? "choice-selected" : ""}`} onClick={() => setAnswers((current) => ({ ...current, [question.id]: option }))}>{option}</button>)}</div>
-                  {question.allow_text && <input className="preference-answer" value={answers[question.id] || ""} onChange={(event) => setAnswers((current) => ({ ...current, [question.id]: event.target.value }))} placeholder="Type your answer" aria-label={question.prompt} />}
+            <div className="card preference-card animate-scale-in">
+              <div className="preference-card-header">
+                <div className="preference-icon-badge">
+                  <Sparkles className="w-4 h-4 text-amber-600" />
                 </div>
-              ))}
-              <button type="button" className="btn btn-primary" onClick={submitPreferences} disabled={!preferenceQuestions.every((question) => answers[question.id]?.trim())}>Continue planning</button>
-            </div>
-          )}
-
-          {/* Destinations grid */}
-          {hasDestinations ? (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "1rem" }}>
-              {destinations.map((dest) => (
-                <DestinationCard
-                  key={dest.id}
-                  destination={dest}
-                  onSelect={handleSelectDestination}
-                  isSelected={tripState?.selected_destination?.id === dest.id}
-                />
-              ))}
-            </div>
-          ) : isPlanning && preferenceQuestions.length === 0 ? (
-            <div>
-              {/* Loading state */}
-              <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", marginBottom: "1.25rem", padding: "0.75rem 1rem", borderRadius: "0.625rem", background: "var(--color-bg-card)", border: "1px solid var(--color-border)" }}>
-                <Loader2 className="w-4 h-4 animate-spin" style={{ color: "var(--color-primary-500)", flexShrink: 0 }} />
-                <span style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)" }}>Destination agents crawling live data...</span>
+                <div>
+                  <h3 className="preference-card-title">Tailor Your Trip Requirements</h3>
+                  <p className="preference-card-subtitle">
+                    Our agents need a few essentials to personalize your route, stays, and activities.
+                  </p>
+                </div>
               </div>
 
-              {/* Skeleton cards */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "1rem" }}>
-                {[1, 2, 3].map((i) => (
-                  <div key={i} style={{ background: "var(--color-bg-card)", border: "1px solid var(--color-border)", borderRadius: "0.75rem", overflow: "hidden" }}>
-                    <div style={{ height: "160px", background: "var(--color-bg-elevated)", position: "relative" }}>
-                      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, transparent 0%, rgba(15, 23, 42 / 0.5) 50%, transparent 100%)", animation: "shimmer 1.5s infinite" }} />
+              <div className="preference-questions-list">
+                {preferenceQuestions.map((question, qIdx) => (
+                  <div className="preference-question-item" key={question.id}>
+                    <div className="question-label-row">
+                      <span className="question-number">0{qIdx + 1}</span>
+                      <label className="question-prompt">{question.prompt}</label>
                     </div>
-                    <div style={{ padding: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                      {[80, 55, 40].map((w, j) => (
-                        <div key={j} style={{ height: "0.75rem", borderRadius: "99px", background: "var(--color-bg-elevated)", width: `${w}%` }} />
-                      ))}
-                    </div>
+
+                    {question.options && question.options.length > 0 && (
+                      <div className="options-chip-group">
+                        {question.options.map((option: string) => {
+                          const isSelected = answers[question.id] === option;
+                          return (
+                            <button
+                              key={option}
+                              type="button"
+                              className={`option-chip ${isSelected ? "option-chip-selected" : ""}`}
+                              onClick={() =>
+                                setAnswers((current) => ({ ...current, [question.id]: option }))
+                              }
+                            >
+                              {isSelected && <span className="chip-check-dot" />}
+                              <span>{option}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {question.allow_text && (
+                      <div style={{ marginTop: question.options && question.options.length > 0 ? "0.25rem" : "0" }}>
+                        <input
+                          className="styled-preference-input"
+                          value={answers[question.id] || ""}
+                          onChange={(event) =>
+                            setAnswers((current) => ({
+                              ...current,
+                              [question.id]: event.target.value,
+                            }))
+                          }
+                          placeholder={
+                            question.options && question.options.length > 0
+                              ? "Or enter custom answer..."
+                              : "Enter your answer (e.g. city, dates, or details)..."
+                          }
+                          aria-label={question.prompt}
+                        />
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
-            </div>
-          ) : null}
 
-          {/* Parallel agents progress */}
-          {isPlanning && hasDestinations && (
-            <div style={{ marginTop: "2rem", paddingTop: "1.5rem", borderTop: "1px solid var(--color-border)" }}>
-              <p style={{ fontSize: "0.6875rem", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--color-text-muted)", marginBottom: "0.875rem" }}>
-                Parallel research in progress
-              </p>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.625rem" }}>
-                {[
-                  { name: "Flights & Transit", desc: "Finding optimal direct routes" },
-                  { name: "Boutique Stays", desc: "Screening verified accommodations" },
-                  { name: "Experiences", desc: "Curating top sights & activities" },
-                  { name: "Pacing Shield", desc: "Checking transit time feasibility" },
-                ].map((step, i) => (
-                  <div key={i} style={{ padding: "0.875rem", borderRadius: "0.625rem", background: "var(--color-bg-card)", border: "1px solid var(--color-border)", display: "flex", alignItems: "center", gap: "0.625rem" }}>
-                    <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: "var(--color-primary-500)", boxShadow: "0 0 6px var(--color-primary-500) / 0.6)", flexShrink: 0, display: "inline-block", animation: "dot-pulse 2.5s infinite ease-in-out" }} />
-                    <div style={{ minWidth: 0 }}>
-                      <p style={{ fontSize: "0.8125rem", fontWeight: 600, lineHeight: 1.3 }}>{step.name}</p>
-                      <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)", marginTop: "0.125rem" }}>{step.desc}</p>
-                    </div>
-                  </div>
+              <div className="preference-actions-footer">
+                <button
+                  type="button"
+                  className="continue-planning-btn"
+                  onClick={submitPreferences}
+                  disabled={!preferenceQuestions.every((question) => answers[question.id]?.trim())}
+                >
+                  <span>Continue Planning</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+
+          {/* Destinations grid if available and not yet selected */}
+          {hasDestinations && !destinationChosen && (
+            <div className="space-y-4">
+              <h2
+                style={{
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "#728095",
+                }}
+              >
+                Candidate Destinations
+              </h2>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+                  gap: "1rem",
+                }}
+              >
+                {destinations.map((dest) => (
+                  <DestinationCard
+                    key={dest.id}
+                    destination={dest}
+                    onSelect={handleSelectDestination}
+                    isSelected={selectedDestId === dest.id}
+                  />
                 ))}
               </div>
             </div>
           )}
         </main>
       </div>
-
     </div>
   );
 }

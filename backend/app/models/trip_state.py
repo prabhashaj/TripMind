@@ -6,11 +6,15 @@ from __future__ import annotations
 
 import uuid
 import datetime as dt
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, computed_field
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 # ============================================================
@@ -128,6 +132,7 @@ class DestinationCandidate(BaseModel):
     match_score: float = 0.0  # 0–1
     geo: GeoPoint | None = None
     sources: list[str] = Field(default_factory=list)
+    provenance: Literal["verified", "estimated"] = "estimated"
 
 
 # ============================================================
@@ -149,10 +154,11 @@ class TransportLeg(BaseModel):
     currency: str = "INR"
     price_label: str | None = None  # e.g., "Best value", "Cheapest"
     source: str | None = None
-    retrieved_at: datetime = Field(default_factory=datetime.utcnow)
+    retrieved_at: datetime = Field(default_factory=utc_now)
     is_available: bool = True
     booking_url: str | None = None
     notes: str | None = None
+    provenance: Literal["verified", "estimated"] = "estimated"
 
 
 class TransportOptions(BaseModel):
@@ -186,9 +192,10 @@ class HotelOption(BaseModel):
     breakfast_included: bool = False
     free_cancellation: bool = False
     source: str | None = None
-    retrieved_at: datetime = Field(default_factory=datetime.utcnow)
+    retrieved_at: datetime = Field(default_factory=utc_now)
     booking_url: str | None = None
     is_available: bool = True
+    provenance: Literal["verified", "estimated"] = "estimated"
 
 
 class HotelOptions(BaseModel):
@@ -217,10 +224,11 @@ class ActivityItem(BaseModel):
     distance_from_hotel_km: float | None = None
     image_url: str | None = None
     source: str | None = None
-    retrieved_at: datetime = Field(default_factory=datetime.utcnow)
+    retrieved_at: datetime = Field(default_factory=utc_now)
     booking_url: str | None = None
     tags: list[str] = Field(default_factory=list)
     is_available: bool = True
+    provenance: Literal["verified", "estimated"] = "estimated"
 
 
 # ============================================================
@@ -270,8 +278,8 @@ class ItineraryDay(BaseModel):
 class Itinerary(BaseModel):
     days: list[ItineraryDay] = Field(default_factory=list)
     total_duration_days: int = 0
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    last_modified: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    last_modified: datetime = Field(default_factory=utc_now)
 
 
 # ============================================================
@@ -330,7 +338,7 @@ class DataSource(BaseModel):
     provider: str
     url: str | None = None
     data_category: str  # flights, hotels, activities, destinations, restaurants, weather
-    retrieved_at: datetime = Field(default_factory=datetime.utcnow)
+    retrieved_at: datetime = Field(default_factory=utc_now)
     is_live: bool = False
 
 
@@ -365,7 +373,7 @@ class VerificationResult(BaseModel):
 class AgentRunRecord(BaseModel):
     agent_name: str
     status: str  # running, completed, failed, skipped
-    started_at: datetime = Field(default_factory=datetime.utcnow)
+    started_at: datetime = Field(default_factory=utc_now)
     completed_at: datetime | None = None
     message: str | None = None
     error: str | None = None
@@ -421,12 +429,12 @@ class TripState(BaseModel):
     replan_triggers: list[str] = Field(default_factory=list)  # which agents to re-run
 
     # Metadata
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    last_modified: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    last_modified: datetime = Field(default_factory=utc_now)
     planning_run_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
     def touch(self) -> None:
-        self.last_modified = datetime.utcnow()
+        self.last_modified = utc_now()
 
     def add_source(self, source: DataSource) -> None:
         # Avoid duplicates by URL

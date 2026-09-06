@@ -5,13 +5,13 @@ Uses Tavily web search + Mistral to find and rank destination candidates.
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
 
 from app.core.logging import get_logger
 from app.models.events import AgentName, AgentStatus, EventType, TripEvent
-from app.models.trip_state import DestinationCandidate, GeoPoint, TripState
+from app.models.trip_state import DataSource, DestinationCandidate, TripState
 from app.providers.base import LLMProvider, SearchProvider
 from app.services.event_bus import publish_event
 
@@ -87,10 +87,10 @@ async def run_destination_agent(
         # Aggregate results, skip failed searches
         all_results: list[dict] = []
         for i, result in enumerate(results_list):
-            if isinstance(result, Exception):
-                logger.warning("search_failed", query=queries[i], error=str(result))
-            else:
+            if isinstance(result, list):
                 all_results.extend(result)
+            else:
+                logger.warning("search_failed", query=queries[i], error=str(result))
 
         await publish_event(TripEvent(
             trip_id=state.trip_id,
@@ -146,7 +146,7 @@ async def run_destination_agent(
             ]
             image_results = await asyncio.gather(*image_tasks, return_exceptions=True)
             for destination, result in zip(destinations_needing_images, image_results):
-                if isinstance(result, Exception):
+                if not isinstance(result, list):
                     continue
                 for item in result:
                     image_url = item.get("image_url")
@@ -158,16 +158,14 @@ async def run_destination_agent(
         state.candidate_destinations = destinations
 
         # Extract sources
-        from app.models.trip_state import DataSource
-        from datetime import datetime
         for r in all_results:
             if r.get("url"):
                 state.add_source(DataSource(
-                    title=r.get("title", r["url"]),
+                    title=str(r.get("title") or r.get("url") or "Destination Source"),
                     provider="Tavily Search",
                     url=r["url"],
                     data_category="destinations",
-                    retrieved_at=datetime.utcnow(),
+                    retrieved_at=datetime.now(timezone.utc),
                     is_live=True,
                 ))
 
@@ -203,12 +201,12 @@ async def run_destination_agent(
 
 def _build_search_queries(state: TripState) -> list[str]:
     origin = state.origin or "India"
-    budget = f"under ₹{int(state.budget_amount):,}" if state.budget_amount else "budget"
+    budget = f"under {state.budget_currency} {int(state.budget_amount):,}" if state.budget_amount else "budget"
     duration = f"{state.dates.duration_days} day" if state.dates.duration_days else "week"
     interests = ", ".join(state.preferences.interests[:3]) if state.preferences.interests else "sightseeing"
 
     queries = [
-        f"best {duration} trip destinations from {origin} {budget} {interests} 2024",
+        f"best {duration} trip destinations from {origin} {budget} {interests}",
     ]
 
     # If user named specific destinations, research them directly

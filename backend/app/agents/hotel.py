@@ -5,13 +5,14 @@ Searches hotel options using web research and provider abstraction.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
 
 from app.core.logging import get_logger
 from app.models.events import AgentName, AgentStatus, EventType, TripEvent
 from app.models.trip_state import (
+    AccommodationType,
     DataSource,
     HotelOption,
     HotelOptions,
@@ -72,8 +73,9 @@ async def run_hotel_agent(
     ))
 
     nights = state.dates.duration_days or 3
-    check_in = state.dates.start.isoformat() if state.dates.start else "2024-12-15"
-    check_out = state.dates.end.isoformat() if state.dates.end else "2024-12-18"
+    from datetime import date, timedelta
+    check_in = state.dates.start.isoformat() if state.dates.start else date.today().isoformat()
+    check_out = state.dates.end.isoformat() if state.dates.end else (date.today() + timedelta(days=max(state.dates.duration_days or 3, 1))).isoformat()
 
     all_hotels: list[HotelOption] = []
 
@@ -102,9 +104,9 @@ async def run_hotel_agent(
     # Supplement with web search if search is available
     if search.status.available:
         try:
-            budget_str = f"under ₹{int(state.budget_amount / nights):,} per night" if state.budget_amount else ""
+            budget_str = f"under {state.budget_currency} {int(state.budget_amount / nights):,} per night" if state.budget_amount else ""
             accom_type = state.preferences.accommodation_type.value if state.preferences.accommodation_type else "any"
-            query = f"best hotels in {destination} {accom_type} {budget_str} 2024"
+            query = f"best hotels in {destination} {accom_type} {budget_str}"
 
             await publish_event(TripEvent(
                 trip_id=state.trip_id,
@@ -116,6 +118,53 @@ async def run_hotel_agent(
             ))
 
             search_results = await search.search(query, max_results=8, search_depth="advanced")
+            context = "\n\n".join([
+                f"[{r['title']}]\n{r['content']}"
+                for r in search_results if r.get("content")
+            ])
+
+            # If provider returned no hotels, extract them from web search results via LLM
+            if not all_hotels and context:
+                try:
+                    extraction: ExtractedHotelList = await llm.complete_structured(
+                        system_prompt=HOTEL_EXTRACTION_PROMPT,
+                        user_message=f"DESTINATION: {destination}\nBUDGET: {budget_str}\n\nSEARCH RESULTS:\n{context}",
+                        output_schema=ExtractedHotelList,
+                        temperature=0.2,
+                    )
+                    for item in extraction.hotels:
+                        try:
+                            price = float(item.get("price_per_night") or 0.0)
+                            if not price and state.budget_amount:
+                                price = round(state.budget_amount / nights * 0.3, 0)
+                            cat_str = (item.get("category") or "any").lower()
+                            cat = AccommodationType.ANY
+                            for enum_val in AccommodationType:
+                                if enum_val.value == cat_str:
+                                    cat = enum_val
+                                    break
+                            hotel_opt = HotelOption(
+                                name=item.get("name", ""),
+                                category=cat,
+                                rating=float(item.get("rating") or 4.0),
+                                location=item.get("location") or destination,
+                                price_per_night=price,
+                                total_price=price * nights,
+                                currency=state.budget_currency,
+                                nights=nights,
+                                amenities=item.get("amenities") or [],
+                                breakfast_included=bool(item.get("breakfast_included", False)),
+                                free_cancellation=bool(item.get("free_cancellation", False)),
+                                source="Tavily Search",
+                                booking_url=item.get("booking_url"),
+                                provenance="estimated",
+                            )
+                            all_hotels.append(hotel_opt)
+                        except Exception:
+                            continue
+                except Exception as ext_exc:
+                    logger.warning("hotel_extraction_failed", error=str(ext_exc))
+
             image_tasks = [
                 search.search(
                     f"{hotel.name} {hotel.location} hotel exterior room photo",
@@ -124,36 +173,33 @@ async def run_hotel_agent(
                 )
                 for hotel in all_hotels[:4] if not hotel.image_url
             ]
-            image_results = await asyncio.gather(*image_tasks, return_exceptions=True)
-            used_images: set[str] = set()
-            image_index = 0
-            for hotel in all_hotels:
-                if hotel.image_url or image_index >= len(image_results):
-                    continue
-                result = image_results[image_index]
-                image_index += 1
-                if isinstance(result, Exception):
-                    continue
-                for item in result:
-                    image_url = item.get("image_url")
-                    if image_url and image_url not in used_images:
-                        hotel.image_url = image_url
-                        used_images.add(image_url)
-                        break
-            context = "\n\n".join([
-                f"[{r['title']}]\n{r['content']}"
-                for r in search_results if r.get("content")
-            ])
+            if image_tasks:
+                image_results = await asyncio.gather(*image_tasks, return_exceptions=True)
+                used_images: set[str] = set()
+                image_index = 0
+                for hotel in all_hotels:
+                    if hotel.image_url or image_index >= len(image_results):
+                        continue
+                    result = image_results[image_index]
+                    image_index += 1
+                    if not isinstance(result, list):
+                        continue
+                    for item in result:
+                        image_url = item.get("image_url")
+                        if image_url and image_url not in used_images:
+                            hotel.image_url = image_url
+                            used_images.add(image_url)
+                            break
 
             # Track sources
             for r in search_results:
                 if r.get("url"):
                     state.add_source(DataSource(
-                        title=r.get("title", r["url"]),
+                        title=str(r.get("title") or r.get("url") or "Hotel Source"),
                         provider="Tavily Search",
                         url=r["url"],
                         data_category="hotels",
-                        retrieved_at=datetime.utcnow(),
+                        retrieved_at=datetime.now(timezone.utc),
                         is_live=True,
                     ))
 
@@ -163,7 +209,7 @@ async def run_hotel_agent(
     state.hotels = HotelOptions(
         options=all_hotels,
         provider_available=hotel_provider.status.available,
-        last_searched=datetime.utcnow(),
+        last_searched=datetime.now(timezone.utc),
     )
     state.touch()
 

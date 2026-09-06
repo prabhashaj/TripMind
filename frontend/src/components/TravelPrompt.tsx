@@ -6,11 +6,6 @@ import { api, getUserId } from "@/lib/api";
 import { useTripStore } from "@/store/trip-store";
 import {
   ArrowRight,
-  MapPin,
-  Calendar,
-  Users,
-  Wallet,
-  Compass,
   AlertCircle,
   Loader2,
 } from "lucide-react";
@@ -22,7 +17,6 @@ export function TravelPrompt() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const router = useRouter();
   const { setTripId, setIsPlanning, reset } = useTripStore();
-  const currentQuery = query.trim() || textareaRef.current?.value.trim() || "";
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -56,16 +50,6 @@ export function TravelPrompt() {
       e.preventDefault();
       handleSubmit();
     }
-  };
-
-  const handleChipClick = (chipPrompt: string) => {
-    setQuery((prev) => (!prev ? chipPrompt : `${prev}, focused on ${chipPrompt.toLowerCase().replace("plan a ", "").trim()}`));
-    textareaRef.current?.focus();
-  };
-
-  const handleSelectExample = (exampleQuery: string) => {
-    setQuery(exampleQuery);
-    textareaRef.current?.focus();
   };
 
   return (

@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { TravelImage } from "@/components/TravelImage";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 interface DestinationSpotlight {
   id: string;
@@ -168,33 +169,36 @@ export default function HomePage() {
   const router = useRouter();
 
   return (
-    <div className="min-h-screen flex flex-col relative overflow-x-hidden" style={{ background: "linear-gradient(180deg, var(--color-bg-base) 0%, var(--color-bg-surface) 100%)", color: "var(--color-text-primary)" }}>
+    <div className="min-h-screen flex flex-col relative overflow-x-hidden bg-background text-foreground">
       {/* Subtle ambient light */}
       <div className="hero-glow" />
 
       {/* ── Top Header ────────────────────────────────────────── */}
-      <header className="classical-nav">
-        <div className="container-nav">
-          <div className="classical-brand">
-            <div className="classical-brand-mark">
-              <Map className="w-4 h-4" />
+      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container flex h-14 items-center justify-between max-w-7xl mx-auto px-4 md:px-8">
+          <div className="flex items-center gap-2 font-bold text-lg font-display">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/20">
+              <Map className="w-4 h-4 text-primary" />
             </div>
             <span>TripMind</span>
           </div>
 
-          <nav className="classical-links">
-            <a href="#destinations">
-              Destinations
-            </a>
-            <a href="#features">
-              Features
-            </a>
-            <a href="#how-it-works">
-              How it works
-            </a>
-            <Link href="/login" className="classical-auth-link">Sign in</Link>
-
+          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-muted-foreground">
+            <a href="#destinations" className="hover:text-primary transition-colors">Destinations</a>
+            <a href="#features" className="hover:text-primary transition-colors">Features</a>
+            <a href="#how-it-works" className="hover:text-primary transition-colors">How it works</a>
           </nav>
+
+          <div className="flex items-center gap-2">
+            <Link href="/login">
+              <Button variant="ghost" size="sm" className="hidden sm:inline-flex">Sign In</Button>
+            </Link>
+            <Link href="/chat">
+              <Button size="sm" className="rounded-full shadow-sm">
+                Start Planning
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -211,7 +215,7 @@ export default function HomePage() {
           </h1>
 
           {/* Subtitle */}
-          <p className="animate-fade-in-up animate-delay-200" style={{ fontSize: "1.0625rem", lineHeight: 1.65, color: "var(--color-text-secondary)", maxWidth: "580px", marginBottom: "2.25rem" }}>
+          <p className="animate-fade-in-up animate-delay-200 text-lg leading-relaxed text-muted-foreground max-w-[580px] mb-9">
             Turn your ideas, budget, and travel style into complete day-by-day itineraries with verified transport, curated stays, and local experiences.
           </p>
 
@@ -242,15 +246,15 @@ export default function HomePage() {
         </section>
 
         {/* ── Curated Destinations ────────────── */}
-        <section id="destinations" style={{ padding: "4rem 0", borderTop: "1px solid var(--color-border)", background: "var(--color-bg-surface)" }}>
+        <section id="destinations" className="py-16 border-t border-border bg-muted/30">
           <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "0 1.5rem" }}>
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-end", justifyContent: "space-between", gap: "1rem", marginBottom: "2.25rem" }}>
               <div>
-                <p style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-primary-600)", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "0.5rem" }}>Curated Inspiration</p>
-                <h2 className="font-display" style={{ fontSize: "1.75rem", letterSpacing: "-0.02em", color: "var(--color-text-primary)" }}>
+                <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-2">Curated Inspiration</p>
+                <h2 className="font-display text-2xl tracking-tight text-foreground">
                   Trending Destinations
                 </h2>
-                <p style={{ fontSize: "0.875rem", color: "var(--color-text-secondary)", marginTop: "0.25rem" }}>
+                <p className="text-sm text-muted-foreground mt-1">
                   Select any destination to instantly populate your itinerary planner.
                 </p>
               </div>
@@ -273,7 +277,7 @@ export default function HomePage() {
                   }}
                 >
                   {/* Photo container */}
-                  <div style={{ position: "relative", height: "190px", overflow: "hidden", background: "var(--color-bg-input)" }}>
+                  <div className="relative h-[190px] overflow-hidden bg-muted">
                     <TravelImage
                       src={dest.image}
                       alt={dest.name}
@@ -300,20 +304,20 @@ export default function HomePage() {
                   </div>
 
                   {/* Card bottom details */}
-                  <div style={{ padding: "0.875rem 1rem", display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--color-bg-card)" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.875rem", fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+                  <div className="px-4 py-3.5 flex items-center justify-between bg-card">
+                    <div className="flex items-center gap-3.5 text-xs text-muted-foreground">
                       <span style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
-                        <Clock className="w-3.5 h-3.5 text-amber-700" />
+                        <Clock className="w-3.5 h-3.5 text-amber-500" />
                         {dest.duration}
                       </span>
                       <span>·</span>
-                      <span style={{ display: "flex", alignItems: "center", gap: "0.3rem", color: "var(--color-text-secondary)", fontWeight: 500 }}>
+                      <span className="font-medium text-muted-foreground flex items-center gap-1">
                         <Wallet className="w-3.5 h-3.5 text-emerald-500" />
                         {dest.budgetEstimate}
                       </span>
                     </div>
 
-                    <span className="destination-action" style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-primary-600)", display: "flex", alignItems: "center", gap: "0.25rem" }}>
+                    <span className="text-xs font-semibold text-primary flex items-center gap-1 group-hover:underline">
                       Plan this <ArrowRight className="w-3 h-3" />
                     </span>
                   </div>
@@ -335,34 +339,33 @@ export default function HomePage() {
             {FIELD_NOTES.map((note, index) => (
               <article className={`field-note field-note-${index + 1}`} key={note.title}>
                 <div className="field-note-image-wrap"><TravelImage src={note.image} alt={note.place} className="field-note-image" /><span className="field-note-index">0{index + 1}</span></div>
-                <div className="field-note-copy"><span>{note.place}</span><h3>{note.title}</h3><p>{note.note}</p><Link href={`/chat?prompt=${encodeURIComponent(`Plan a trip to ${note.place} with a ${note.title.toLowerCase()} feel`)}`} aria-label={`Plan ${note.title}`}><ArrowUpRight className="w-4 h-4" /></Link></div>
+                <div className="field-note-copy"><span>{note.place}</span><h3>{note.title}</h3><p>{note.note}</p></div>
               </article>
             ))}
           </div>
         </section>
 
-        {/* ── Features Section ─────────────────────────────────── */}
-        <section id="features" style={{ padding: "5rem 0", borderTop: "1px solid var(--color-border)" }}>
+        <section id="features" className="py-20 border-t border-border">
           <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "0 1.5rem" }}>
             <div style={{ textAlign: "center", marginBottom: "3rem" }}>
-              <p style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-primary-600)", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "0.5rem" }}>Bespoke Features</p>
-              <h2 className="font-display" style={{ fontSize: "1.75rem", letterSpacing: "-0.02em", marginBottom: "0.5rem", color: "var(--color-text-primary)" }}>
+              <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-2">Bespoke Features</p>
+              <h2 className="font-display text-2xl tracking-tight mb-2 text-foreground">
                 Everything in one unified workspace
               </h2>
-              <p style={{ fontSize: "0.9375rem", color: "var(--color-text-secondary)", maxWidth: "560px", margin: "0 auto" }}>
+              <p className="text-[15px] text-muted-foreground max-w-[560px] mx-auto">
                 Say goodbye to ten open browser tabs. TripMind coordinates every aspect of your holiday into a cohesive, realistic travel schedule.
               </p>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "1.25rem" }}>
               {FEATURES.map((feat, i) => (
-                <div key={i} className="card" style={{ padding: "1.5rem", display: "flex", gap: "1rem", alignItems: "flex-start", transition: "all var(--transition-base)" }}>
-                  <div style={{ width: "2.5rem", height: "2.5rem", borderRadius: "var(--radius-md)", background: "var(--color-primary-50)", border: "1px solid var(--color-primary-200)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all var(--transition-base)" }}>
+                <div key={i} className="card p-6 flex gap-4 items-start transition-all">
+                  <div className="w-10 h-10 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
                     {feat.icon}
                   </div>
                   <div>
-                    <h3 style={{ fontSize: "1rem", fontWeight: 600, color: "var(--color-text-primary)", marginBottom: "0.375rem" }}>{feat.title}</h3>
-                    <p style={{ fontSize: "0.8125rem", lineHeight: 1.65, color: "var(--color-text-secondary)" }}>{feat.description}</p>
+                    <h3 className="text-base font-semibold text-foreground mb-1.5">{feat.title}</h3>
+                    <p className="text-[13px] leading-relaxed text-muted-foreground">{feat.description}</p>
                   </div>
                 </div>
               ))}
@@ -371,26 +374,26 @@ export default function HomePage() {
         </section>
 
         {/* ── How It Works ────────────────────────────────────── */}
-        <section id="how-it-works" style={{ padding: "5rem 0", borderTop: "1px solid var(--color-border)", background: "var(--color-bg-surface)" }}>
+        <section id="how-it-works" className="py-20 border-t border-border bg-muted/30">
           <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "0 1.5rem" }}>
             <div style={{ textAlign: "center", marginBottom: "3rem" }}>
-              <p style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-primary-600)", letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: "0.5rem" }}>Simple & Seamless</p>
-              <h2 className="font-display" style={{ fontSize: "1.75rem", letterSpacing: "-0.02em", marginBottom: "0.5rem", color: "var(--color-text-primary)" }}>
+              <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-2">Simple & Seamless</p>
+              <h2 className="font-display text-2xl tracking-tight mb-2 text-foreground">
                 How TripMind designs your journey
               </h2>
-              <p style={{ fontSize: "0.9375rem", color: "var(--color-text-secondary)", maxWidth: "520px", margin: "0 auto" }}>
+              <p className="text-[15px] text-muted-foreground max-w-[520px] mx-auto">
                 From a single casual thought to a complete, verified holiday in three effortless steps.
               </p>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.25rem" }}>
               {WORKFLOW_STEPS.map((step, i) => (
-                <div key={i} className="card" style={{ padding: "1.75rem", transition: "all var(--transition-base)" }}>
-                  <div style={{ marginBottom: "1rem", color: "var(--color-primary-300)", fontSize: "0.875rem", fontWeight: 600 }}>
+                <div key={i} className="card p-7 transition-all">
+                  <div className="mb-4 text-primary/70 text-sm font-semibold">
                     {step.step}
                   </div>
-                  <h3 style={{ fontSize: "1.0625rem", fontWeight: 600, marginBottom: "0.5rem", color: "var(--color-text-primary)" }}>{step.title}</h3>
-                  <p style={{ fontSize: "0.875rem", lineHeight: 1.7, color: "var(--color-text-secondary)" }}>{step.desc}</p>
+                  <h3 className="text-base font-semibold mb-2 text-foreground">{step.title}</h3>
+                  <p className="text-sm leading-relaxed text-muted-foreground">{step.desc}</p>
                 </div>
               ))}
             </div>
@@ -405,16 +408,16 @@ export default function HomePage() {
       </main>
 
       {/* ── Footer ────────────────────────────────────────────── */}
-      <footer style={{ borderTop: "1px solid var(--color-border)", padding: "2rem 0", background: "var(--color-bg-surface)" }}>
+      <footer className="border-t border-border py-8 bg-muted/20">
         <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "0 1.5rem", height: "auto", display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
           <div className="footer-brand">
             <div className="classical-brand-mark footer-brand-mark">
-              <Map className="w-3 h-3" />
+              <Map className="w-3 h-3 text-primary" />
             </div>
             <span className="footer-brand-name">TripMind</span>
             <span className="footer-brand-tagline">Intelligent Travel Designer</span>
           </div>
-          <p style={{ fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
+          <p className="text-xs text-muted-foreground">
             © 2026 TripMind. Verified itineraries & live travel intelligence.
           </p>
         </div>

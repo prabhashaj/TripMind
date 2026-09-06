@@ -4,7 +4,7 @@ Validates the complete itinerary for logical, geographic, and practical feasibil
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.core.logging import get_logger
 from app.models.events import AgentName, AgentStatus, EventType, TripEvent
@@ -198,7 +198,7 @@ async def run_verification_agent(state: TripState) -> TripState:
         overall_status=overall,
         checks=checks,
         issues_found=len(failed) + len(warnings),
-        verified_at=datetime.utcnow(),
+        verified_at=datetime.now(timezone.utc),
     )
     state.verification = result
     state.touch()

@@ -28,6 +28,8 @@ settings = get_settings()
 class MistralProvider(LLMProvider):
     """Production Mistral API integration."""
 
+    _client: Any
+
     def __init__(self) -> None:
         if settings.mistral_available:
             self._client = Mistral(api_key=settings.mistral_api_key)
@@ -71,7 +73,8 @@ class MistralProvider(LLMProvider):
             kwargs["response_format"] = response_format
 
         response = await self._client.chat.complete_async(**kwargs)
-        content = response.choices[0].message.content
+        raw_content = response.choices[0].message.content if response.choices and response.choices[0].message else ""
+        content = str(raw_content or "")
         logger.debug(
             "mistral_completion",
             model=model,
@@ -89,6 +92,8 @@ class MistralProvider(LLMProvider):
         model: str | None = None,
     ) -> Any:
         """Use Mistral with JSON mode to get a structured Pydantic output."""
+        if not isinstance(output_schema, type) or not issubclass(output_schema, BaseModel):
+            raise TypeError("output_schema must be a Pydantic BaseModel")
         model = model or settings.mistral_model_small
 
         schema_str = json.dumps(output_schema.model_json_schema(), indent=2)
@@ -106,12 +111,25 @@ class MistralProvider(LLMProvider):
             model=model,
         )
 
-        # Strip markdown code fences if present
-        raw = raw.strip()
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-            raw = raw.strip()
-
-        return output_schema.model_validate_json(raw)
+        last_error: Exception | None = None
+        for attempt in range(3):
+            try:
+                cleaned = raw.strip()
+                if cleaned.startswith("```"):
+                    cleaned = cleaned.split("```", 2)[1].removeprefix("json").strip()
+                return output_schema.model_validate_json(cleaned)
+            except Exception as exc:
+                last_error = exc
+                if attempt == 2:
+                    break
+                raw = await self.complete(
+                    system_prompt=(
+                        f"{augmented_system}\nThe previous response failed validation: {exc}. "
+                        "Repair it and return only valid JSON."
+                    ),
+                    user_message=f"Original request:\n{user_message}\n\nInvalid response:\n{raw}",
+                    response_format={"type": "json_object"},
+                    temperature=0.0,
+                    model=model,
+                )
+        raise ValueError(f"Structured LLM output failed schema validation after 3 attempts: {last_error}") from last_error

@@ -23,7 +23,12 @@ async def test_start_planning():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
             "/api/trips/plan",
-            json={"query": "Plan a 5-day trip from Hyderabad to Goa for 2 people under ₹40,000"},
+            json={
+                "query": "Plan a 5-day trip from Hyderabad to Goa for 2 people under ₹40,000",
+                "home_location": "Hyderabad",
+                "home_country": "India",
+                "currency": "INR",
+            },
         )
     assert response.status_code == 200
     data = response.json()
@@ -71,7 +76,7 @@ def test_trip_state_source_deduplication():
         provider="Tavily",
         url="https://example.com/travel",
         data_category="destinations",
-        retrieved_at=datetime.datetime.utcnow(),
+        retrieved_at=datetime.datetime.now(datetime.timezone.utc),
     )
     state.add_source(src)
     state.add_source(src)  # duplicate

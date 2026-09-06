@@ -5,6 +5,7 @@ Searches intercity and local transport options using provider abstraction.
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 
 from app.core.logging import get_logger
 from app.models.events import AgentName, AgentStatus, EventType, TripEvent
@@ -46,7 +47,7 @@ async def run_transport_agent(
     departure_date = (
         state.dates.start.isoformat()
         if state.dates.start
-        else "2024-12-15"
+        else __import__("datetime").date.today().isoformat()
     )
 
     intercity_legs: list[TransportLeg] = []
@@ -115,7 +116,7 @@ async def run_transport_agent(
         intercity=intercity_legs,
         local=[],
         provider_available=flight_provider.status.available or train_provider.status.available,
-        last_searched=__import__("datetime").datetime.utcnow(),
+        last_searched=datetime.now(timezone.utc),
     )
     state.touch()
 

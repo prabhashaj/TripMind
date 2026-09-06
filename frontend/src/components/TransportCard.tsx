@@ -1,6 +1,12 @@
 'use client';
 
 import type { TransportLeg } from '@/lib/api';
+import { ProvenanceBadge } from '@/components/ProvenanceBadge';
+import { Plane, Train, Bus, Car } from 'lucide-react';
+import { Card, CardContent, CardFooter } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface TransportCardProps {
   leg: TransportLeg;
@@ -25,12 +31,18 @@ function formatCurrency(amount: number, currency: string): string {
   return `${currency} ${amount.toLocaleString()}`;
 }
 
-const MODE_ICONS: Record<string, string> = {
-  flight: 'AIR',
-  train: 'RAIL',
-  bus: 'BUS',
-  car: 'CAR',
-};
+function renderModeIcon(mode: string) {
+  switch (mode) {
+    case 'flight':
+      return <Plane className="w-4 h-4 text-sky-500" />;
+    case 'train':
+      return <Train className="w-4 h-4 text-green-500" />;
+    case 'bus':
+      return <Bus className="w-4 h-4 text-amber-500" />;
+    default:
+      return <Car className="w-4 h-4 text-purple-500" />;
+  }
+}
 
 const MODE_LABELS: Record<string, string> = {
   flight: 'Flight',
@@ -41,36 +53,36 @@ const MODE_LABELS: Record<string, string> = {
 
 export function TransportCard({ leg, onSelect, isSelected }: TransportCardProps) {
   const isMock = leg.source === 'mock';
+  const provenance = leg.provenance || (isMock ? 'estimated' : 'verified');
+  const category = leg.mode === 'flight' ? 'flight' : leg.mode === 'train' ? 'train' : 'general';
 
   return (
-    <div
-      className="rounded-2xl overflow-hidden transition-all cursor-pointer group animate-scale-in"
-      style={{
-        background: 'var(--color-bg-card)',
-        border: isSelected
-          ? '1px solid rgba(139, 92, 246, 0.5)'
-          : '1px solid var(--color-border)',
-        boxShadow: isSelected ? 'var(--shadow-primary)' : 'var(--shadow-lg)',
-      }}
+    <Card
+      className={cn(
+        "overflow-hidden transition-all duration-200 cursor-pointer group flex flex-col justify-between border",
+        isSelected
+          ? "border-primary ring-1 ring-primary shadow-md bg-primary/5"
+          : "border-border shadow-sm hover:border-primary/30"
+      )}
     >
-      <div className="p-5">
+      <CardContent className="p-4 flex flex-col gap-4">
         {/* Header row */}
-        <div className="flex items-start justify-between gap-4 mb-4">
+        <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             {/* Mode badge */}
             <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
-              style={{
-                background: isSelected ? 'rgba(139, 92, 246, 0.15)' : 'var(--color-bg-elevated)',
-              }}
+              className={cn(
+                "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border",
+                isSelected ? "bg-primary/10 border-primary/20" : "bg-muted border-border"
+              )}
             >
-              {MODE_ICONS[leg.mode] || 'CAR'}
+              {renderModeIcon(leg.mode)}
             </div>
             <div>
-              <div className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
+              <div className="text-xs font-medium text-muted-foreground">
                 {MODE_LABELS[leg.mode] || leg.mode}
               </div>
-              <div className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+              <div className="text-sm font-semibold text-foreground">
                 {leg.carrier || leg.provider}
               </div>
             </div>
@@ -78,92 +90,79 @@ export function TransportCard({ leg, onSelect, isSelected }: TransportCardProps)
 
           {/* Price */}
           <div className="text-right">
-            <div className="text-xl font-bold font-display" style={{ color: isSelected ? 'var(--color-primary-600)' : 'var(--color-text-primary)' }}>
+            <div className={cn(
+              "text-xl font-bold font-display",
+              isSelected ? "text-primary" : "text-foreground"
+            )}>
               {formatCurrency(leg.price, leg.currency)}
             </div>
             {leg.price_label && (
-              <div
-                className="text-xs px-2 py-0.5 rounded-full mt-1 inline-block"
-                style={{
-                  background: 'rgba(52, 211, 153, 0.1)',
-                  color: 'var(--color-success)',
-                }}
-              >
+              <Badge variant="secondary" className="bg-green-500/10 text-green-700 dark:text-green-400 mt-1 border-none text-[10px] py-0">
                 {leg.price_label}
-              </div>
+              </Badge>
             )}
           </div>
         </div>
 
         {/* Route row */}
-        <div className="flex items-center gap-4 mb-4">
+        <div className="flex items-center gap-4">
           <div className="text-center">
-            <div className="text-2xl font-bold font-display tabular-nums" style={{ color: 'var(--color-text-primary)' }}>
+            <div className="text-2xl font-bold font-display tabular-nums text-foreground">
               {formatTime(leg.departure_time)}
             </div>
-            <div className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+            <div className="text-xs mt-0.5 text-muted-foreground">
               {leg.origin}
             </div>
           </div>
 
           <div className="flex-1 flex flex-col items-center gap-1">
-            <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+            <div className="text-xs text-muted-foreground">
               {formatDuration(leg.duration_minutes)}
             </div>
             <div className="w-full flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: 'var(--color-text-muted)' }} />
-              <div className="flex-1 h-px" style={{ background: 'var(--color-border)' }} />
+              <div className="w-1.5 h-1.5 rounded-full shrink-0 bg-muted-foreground" />
+              <div className="flex-1 h-px bg-border" />
               {leg.stops === 0 ? (
-                <span className="text-xs flex-shrink-0" style={{ color: 'var(--color-success)' }}>Direct</span>
+                <span className="text-xs shrink-0 text-green-600 dark:text-green-500">Direct</span>
               ) : (
-                <span className="text-xs flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{leg.stops} stop{leg.stops > 1 ? 's' : ''}</span>
+                <span className="text-xs shrink-0 text-muted-foreground">{leg.stops} stop{leg.stops > 1 ? 's' : ''}</span>
               )}
-              <div className="flex-1 h-px" style={{ background: 'var(--color-border)' }} />
-              <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: 'var(--color-text-muted)' }} />
+              <div className="flex-1 h-px bg-border" />
+              <div className="w-1.5 h-1.5 rounded-full shrink-0 bg-muted-foreground" />
             </div>
           </div>
 
           <div className="text-center">
-            <div className="text-2xl font-bold font-display tabular-nums" style={{ color: 'var(--color-text-primary)' }}>
+            <div className="text-2xl font-bold font-display tabular-nums text-foreground">
               {formatTime(leg.arrival_time)}
             </div>
-            <div className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+            <div className="text-xs mt-0.5 text-muted-foreground">
               {leg.destination}
             </div>
           </div>
         </div>
 
-        {/* Freshness & mock warning */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-            <div className="w-1.5 h-1.5 rounded-full" style={{ background: isMock ? 'var(--color-warning)' : 'var(--color-success)' }} />
-            {isMock
-              ? 'Estimated — live prices need Amadeus API'
-              : `Checked ${new Date(leg.retrieved_at).toLocaleTimeString()}`}
-          </div>
-          {onSelect && (
-            <button
-              type="button"
-              onClick={() => onSelect(leg.id)}
-              className="text-xs px-3 py-1.5 rounded-lg transition-all"
-              style={{
-                background: isSelected ? 'var(--gradient-primary)' : 'var(--color-bg-elevated)',
-                color: isSelected ? 'var(--color-text-inverse)' : 'var(--color-text-secondary)',
-                fontWeight: isSelected ? 600 : 400,
-              }}
-            >
-              {isSelected ? 'Selected' : 'Select'}
-            </button>
-          )}
+        {/* Provenance badge & details */}
+        <div className="mt-1 pt-3 border-t border-border flex flex-col gap-1.5">
+          <ProvenanceBadge provenance={provenance} category={category} showNote={true} />
         </div>
+      </CardContent>
 
-        {/* Mock notes */}
-        {leg.notes && (
-          <div className="mt-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-            {leg.notes}
-          </div>
-        )}
-      </div>
-    </div>
+      {onSelect && (
+        <CardFooter className="p-4 pt-0 mt-auto">
+          <Button
+            type="button"
+            variant={isSelected ? "default" : "outline"}
+            onClick={() => onSelect(leg.id)}
+            className={cn(
+              "w-full text-xs font-semibold h-9 rounded-xl transition-all",
+              isSelected ? "shadow-md" : "hover:bg-primary/5 hover:border-primary/50"
+            )}
+          >
+            {isSelected ? 'Selected Transport' : 'Select This Route'}
+          </Button>
+        </CardFooter>
+      )}
+    </Card>
   );
 }

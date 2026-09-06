@@ -23,11 +23,29 @@ from app.models.events import AgentStatus, EventType, TripEvent
 from app.models.trip_state import PlanningStatus, TripState, VerificationStatus
 from app.providers.base import FlightProvider, HotelProvider, LLMProvider, SearchProvider, TrainProvider
 from app.services.event_bus import publish_event
+from app.core.config import get_settings
 
 logger = get_logger(__name__)
 
 # Maximum verification/replan loops before giving up
 MAX_REPLAN_LOOPS = 2
+NODE_TIMEOUT_SECONDS = get_settings().workflow_node_timeout_seconds
+
+
+async def _run_with_timeout(operation, state: TripState, node_name: str):
+    try:
+        return await asyncio.wait_for(operation, timeout=NODE_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        state.planning_status = PlanningStatus.FAILED
+        await publish_event(TripEvent(
+            trip_id=state.trip_id,
+            run_id=state.planning_run_id,
+            type=EventType.NODE_TIMEOUT,
+            status=AgentStatus.FAILED,
+            message=f"{node_name} timed out after {NODE_TIMEOUT_SECONDS:.0f}s",
+            data={"node": node_name, "error_code": "node_timeout"},
+        ))
+        return state
 
 
 class WorkflowState(dict):
@@ -53,7 +71,7 @@ async def build_trip_workflow(
     async def node_extract_preferences(state: dict) -> dict:
         ts: TripState = state["trip_state"]
         ts.planning_status = PlanningStatus.EXTRACTING_PREFERENCES
-        ts = await run_user_preference_agent(ts, llm)
+        ts = await _run_with_timeout(run_user_preference_agent(ts, llm), ts, "preference extraction")
         
         # If preference extraction failed, stop the workflow
         if ts.planning_status == PlanningStatus.FAILED:
@@ -64,7 +82,7 @@ async def build_trip_workflow(
     async def node_research_destinations(state: dict) -> dict:
         ts: TripState = state["trip_state"]
         ts.planning_status = PlanningStatus.RESEARCHING_DESTINATIONS
-        ts = await run_destination_agent(ts, llm, search)
+        ts = await _run_with_timeout(run_destination_agent(ts, llm, search), ts, "destination research")
         return {**state, "trip_state": ts}
 
     async def node_research_parallel(state: dict) -> dict:
@@ -72,10 +90,13 @@ async def build_trip_workflow(
         ts: TripState = state["trip_state"]
 
         # Run all three in parallel
+        agent_operations = [
+            ("transport", run_transport_agent(ts.model_copy(deep=True), flight_provider, train_provider, search)),
+            ("hotel", run_hotel_agent(ts.model_copy(deep=True), hotel_provider, llm, search)),
+            ("activity", run_activity_agent(ts.model_copy(deep=True), llm, search)),
+        ]
         results = await asyncio.gather(
-            run_transport_agent(ts, flight_provider, train_provider, search),
-            run_hotel_agent(ts, hotel_provider, llm, search),
-            run_activity_agent(ts, llm, search),
+            *[_run_with_timeout(operation, ts, f"{name} research") for name, operation in agent_operations],
             return_exceptions=True,
         )
 
@@ -88,6 +109,15 @@ async def build_trip_workflow(
                 # Merge sources
                 for source in result.sources:
                     ts.add_source(source)
+            elif isinstance(result, Exception):
+                name = agent_operations[results.index(result)][0] if result in results else "research"
+                logger.error("parallel_agent_failed", agent=name, error=str(result), trip_id=ts.trip_id)
+                await publish_event(TripEvent(
+                    trip_id=ts.trip_id, run_id=ts.planning_run_id,
+                    type=EventType.AGENT_FAILED, agent=name, status=AgentStatus.FAILED,
+                    message=f"{name.title()} search failed; continuing with available data",
+                    data={"agent": name, "error_code": "parallel_agent_failed"},
+                ))
 
         ts.touch()
         return {**state, "trip_state": ts}
@@ -95,19 +125,19 @@ async def build_trip_workflow(
     async def node_build_itinerary(state: dict) -> dict:
         ts: TripState = state["trip_state"]
         ts.planning_status = PlanningStatus.BUILDING_ITINERARY
-        ts = await run_itinerary_agent(ts, llm)
+        ts = await _run_with_timeout(run_itinerary_agent(ts, llm), ts, "itinerary building")
         return {**state, "trip_state": ts}
 
     async def node_calculate_budget(state: dict) -> dict:
         ts: TripState = state["trip_state"]
         ts.planning_status = PlanningStatus.CALCULATING_BUDGET
-        ts = await run_budget_agent(ts)
+        ts = await _run_with_timeout(run_budget_agent(ts), ts, "budget calculation")
         return {**state, "trip_state": ts}
 
     async def node_verify(state: dict) -> dict:
         ts: TripState = state["trip_state"]
         ts.planning_status = PlanningStatus.VERIFYING
-        ts = await run_verification_agent(ts)
+        ts = await _run_with_timeout(run_verification_agent(ts), ts, "verification")
         return {**state, "trip_state": ts}
 
     async def node_complete(state: dict) -> dict:

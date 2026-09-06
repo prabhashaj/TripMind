@@ -1,9 +1,8 @@
-export function cn(...values: Array<string | Record<string, boolean> | false | null | undefined>) {
-  return values.flatMap((value) => {
-    if (!value) return [];
-    if (typeof value === "string") return [value];
-    return Object.entries(value).filter(([, enabled]) => enabled).map(([name]) => name);
-  }).join(" ");
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
 }
 
 export function formatINR(amount = 0) {

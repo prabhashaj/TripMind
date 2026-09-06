@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     # Amadeus (optional)
     amadeus_client_id: str = ""
     amadeus_client_secret: str = ""
+    workflow_node_timeout_seconds: float = 30.0
 
     @field_validator("cors_origins")
     @classmethod

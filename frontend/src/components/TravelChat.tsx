@@ -4,12 +4,32 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, getUserId } from '@/lib/api';
 import { useTripStore } from '@/store/trip-store';
-import { Send, Loader2, Sparkles, MapPin } from 'lucide-react';
+import { createTripSSEClient } from '@/lib/sse-client';
+import { AgentActionShimmer } from '@/components/AgentActionShimmer';
+import { DestinationCard } from '@/components/DestinationCard';
+import { IntakeWizard, IntakeData } from '@/components/IntakeWizard';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  Send,
+  Loader2,
+  Sparkles,
+  MapPin,
+  ArrowRight,
+  Compass,
+  CheckCircle2,
+  User
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  suggestedTripQuery?: string;
+  planningTripId?: string;
 }
 
 interface TravelChatProps {
@@ -17,595 +37,483 @@ interface TravelChatProps {
 }
 
 const WELCOME_MESSAGES = [
-  'Hello! I am your AI Travel Assistant. Ask me about destinations, best times to visit, travel tips, or budgets. When you are ready to plan a trip, just say "Plan a trip to..." and I will create a complete itinerary for you.',
-  'Hi there! I can answer travel questions, give destination recommendations, or help you plan your perfect trip. Just chat naturally with me.',
-  'Welcome! Feel free to ask me anything about travel. When you want to plan a trip, tell me where you want to go, when, and for how many people.',
+  'Tell me the destination you want to plan. I will collect the essential details and then start the planning workflow.',
 ];
 
-const TRAVEL_KEYWORDS = [
-  'trip', 'travel', 'vacation', 'holiday', 'journey', 'destination',
-  'hotel', 'flight', 'resort', 'beach', 'mountain', 'city', 'country',
-  'visit', 'explore', 'adventure', 'getaway', 'plan', 'itinerary'
-];
-
-const PLANNING_TRIGGERS = [
-  'plan a trip', 'plan my trip', 'plan the trip', 'create a trip',
-  'make a plan', 'design a trip', 'organize a trip', 'start planning',
-  'book a trip', 'arrange a trip', 'set up a trip',
-  'i want to travel to', 'i need a trip to', 'can you plan',
-  'help me plan', 'please plan'
-];
+/** Render the small Markdown subset used by the assistant without injecting HTML. */
+function renderMessage(content: string) {
+  return content.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g).map((part, index) => {
+    const isBold = (part.startsWith('**') && part.endsWith('**')) || (part.startsWith('*') && part.endsWith('*'));
+    return isBold ? <strong key={index}>{part.replace(/^\*\*?|\*\*?$/g, '')}</strong> : part;
+  });
+}
 
 export function TravelChat({ initialPrompt = '' }: TravelChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [hasStarted, setHasStarted] = useState(false);
-  const [suggestedFollowups, setSuggestedFollowups] = useState<string[]>([]);
+  const [isLaunchingPlan, setIsLaunchingPlan] = useState(false);
   const [userId, setUserId] = useState('');
   const [conversationId, setConversationId] = useState('');
-  
-  const router = useRouter();
-  const { setTripId, setIsPlanning, reset } = useTripStore();
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [lastUserQuery, setLastUserQuery] = useState('');
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [selectedDestId, setSelectedDestId] = useState<string | null>(null);
+  const [showWizard, setShowWizard] = useState(true);
 
-  // Initialize with welcome message
+  const router = useRouter();
+  const { setTripId, setIsPlanning, reset, tripState, preferenceQuestions } = useTripStore();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const sseRef = useRef<ReturnType<typeof createTripSSEClient> | null>(null);
+
   useEffect(() => {
-    if (initialPrompt) setInput(initialPrompt);
+    if (initialPrompt) {
+      setInput(initialPrompt);
+      setLastUserQuery(initialPrompt);
+      setShowWizard(false);
+    }
   }, [initialPrompt]);
 
   useEffect(() => {
     const welcomeMsg = WELCOME_MESSAGES[Math.floor(Math.random() * WELCOME_MESSAGES.length)];
-    setMessages([{
-      role: 'assistant',
-      content: welcomeMsg,
-      timestamp: new Date()
-    }]);
-  }, []);
+    setMessages([
+      {
+        role: 'assistant',
+        content: welcomeMsg,
+        timestamp: new Date(),
+      },
+    ]);
 
-  useEffect(() => {
     const storedUserId = getUserId();
-    const storedConversationId = window.localStorage.getItem('tripmind-conversation-id') || crypto.randomUUID();
+    const storedConversationId =
+      window.localStorage.getItem('tripmind-conversation-id') || crypto.randomUUID();
     window.localStorage.setItem('tripmind-user-id', storedUserId);
     window.localStorage.setItem('tripmind-conversation-id', storedConversationId);
     setUserId(storedUserId);
     setConversationId(storedConversationId);
+
+    return () => {
+      if (sseRef.current) {
+        sseRef.current.disconnect();
+      }
+    };
   }, []);
 
-  // Auto-scroll to bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [messages, isLoading, tripState, preferenceQuestions]);
 
-  const detectPlanningIntent = (text: string): boolean => {
-    const lower = text.toLowerCase();
-    return PLANNING_TRIGGERS.some(trigger => lower.includes(trigger));
-  };
+  const handleLaunchPlanning = async (queryToPlan?: string, statusMessage?: string, wizardData?: IntakeData) => {
+    const tripQuery = (queryToPlan || lastUserQuery || input || 'Curated holiday destination').trim();
+    if (!tripQuery) return;
 
-  const extractTripQuery = (text: string): string | null => {
-    const lower = text.toLowerCase().trim();
-    
-    // First check for explicit planning triggers
-    for (const trigger of PLANNING_TRIGGERS) {
-      if (lower.includes(trigger)) {
-        // Try to extract the actual query
-        const index = lower.indexOf(trigger);
-        const query = text.substring(index + trigger.length).trim();
-        // Only proceed if there's actual content after the trigger
-        if (query.length > 0) {
-          return query;
-        }
-        return text.trim();
-      }
-    }
-    
-    // For very short messages (hi, hello, hey), never trigger planning
-    if (lower.match(/^(hi|hello|hey|hii?|yo|hey there|good morning|good evening|what's up|howdy|thanks|thank you)$/i)) {
-      return null;
-    }
-    
-    // Check if it looks like a planning request with enough context
-    const hasTravelKeyword = TRAVEL_KEYWORDS.some(kw => lower.includes(kw));
-    const hasLocation = /(to |from |in |at )[a-z]/i.test(lower);
-    const hasDuration = /\d+\s*(day|night|week)/i.test(lower);
-    const hasActionWord = /(plan|book|create|design|organize|arrange|visit|explore|want|need|can you|could you|trip|travel)/i.test(lower);
-    
-    // Require travel context with intent
-    if (hasTravelKeyword && (hasLocation || hasDuration || hasActionWord)) {
-      return text.trim();
-    }
-    
-    return null;
-  };
+    setIsLaunchingPlan(true);
 
-  const generateFollowUpSuggestions = (userMessage: string): string[] => {
-    const lower = userMessage.toLowerCase();
-    const suggestions: string[] = [];
-    
-    if (lower.includes('where') || lower.includes('destination') || lower.includes('go')) {
-      suggestions.push('What type of trip are you interested in?');
-      suggestions.push('Do you have a specific destination in mind?');
-    }
-    
-    if (lower.includes('budget') || lower.includes('cost') || lower.includes('price')) {
-      suggestions.push('What is your approximate budget range?');
-    }
-    
-    if (lower.includes('when') || lower.includes('time') || lower.includes('best')) {
-      suggestions.push('What time of year are you planning to travel?');
-    }
-    
-    if (lower.includes('how many') || lower.includes('who') || lower.includes('people')) {
-      suggestions.push('How many people will be traveling?');
-    }
-    
-    if (suggestions.length === 0 && !detectPlanningIntent(userMessage)) {
-      suggestions.push('When you are ready to plan, just tell me where you want to go!');
-    }
-    
-    return suggestions.slice(0, 2);
-  };
-
-  const handleSubmit = async (event?: React.FormEvent<HTMLFormElement>) => {
-    event?.preventDefault();
-    
-    const text = input.trim();
-    if (!text || isLoading) return;
-    
-    setInput('');
-    setSuggestedFollowups([]);
-    
-    // Add user message
-    setMessages(prev => [
-      ...prev,
-      {
-        role: 'user',
-        content: text,
-        timestamp: new Date()
-      }
-    ]);
-    
-    // Check if this is a planning request
-    const tripQuery = extractTripQuery(text);
-    
-    if (tripQuery) {
-      // User wants to start planning
-      setIsLoading(true);
-      
-      try {
-        reset();
-        const response = await api.startPlanning(tripQuery, userId || undefined);
-        setTripId(response.trip_id);
-        setIsPlanning(true);
-        setHasStarted(true);
-        router.push(`/plan/${response.trip_id}`);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        setMessages(prev => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: `I am sorry, I encountered an error starting your trip planning: ${message}. Please check that the backend is running.`,
-            timestamp: new Date()
-          }
-        ]);
-        setIsLoading(false);
-      }
-      return;
-    }
-    
-    setIsLoading(true);
     try {
-      const result = await api.sendConversationMessage(userId, conversationId, text, true);
-      setMessages(prev => [
+      reset();
+      // Read any saved profile preferences
+      let homeLocation: string | undefined;
+      let homeCountry: string | undefined;
+      let currency: string | undefined;
+
+      try {
+        const saved = window.localStorage.getItem('tripmind-user-profile');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.home_city) homeLocation = parsed.home_city;
+          if (parsed.home_country) homeCountry = parsed.home_country;
+          if (parsed.currency) currency = parsed.currency;
+        }
+      } catch {
+        /* ignore */
+      }
+
+      const response = await api.startPlanning(tripQuery, userId || undefined, {
+        home_location: homeLocation,
+        home_country: homeCountry,
+        currency: currency,
+        budget: wizardData?.budgetStyle,
+        trip_duration: wizardData?.duration,
+      });
+
+      const newTripId = response.trip_id;
+      setTripId(newTripId);
+      setIsPlanning(true);
+
+      // Connect to SSE directly inside the chat interface
+      if (sseRef.current) {
+        sseRef.current.disconnect();
+      }
+      const client = createTripSSEClient(newTripId);
+      sseRef.current = client;
+
+      client
+        .on('*', (event) => {
+          useTripStore.getState().handleEvent(event);
+        })
+        .on('trip.ready', () => {
+          useTripStore.setState({ isPlanning: false });
+          router.push(`/trip/${newTripId}`);
+        })
+        .connect();
+
+      // Poll current trip state
+      api.getTrip(newTripId).then((st) => useTripStore.getState().setTripState(st)).catch(console.error);
+
+      // Replace an existing “brief ready” prompt when launched from it;
+      // otherwise add the one combined workflow message.
+      setMessages((prev) => {
+        const lastAssistantIndex = [...prev].map((message) => message.role).lastIndexOf('assistant');
+        const lastAssistant = lastAssistantIndex >= 0 ? prev[lastAssistantIndex] : undefined;
+        const workflowMessage: Message = {
+          role: 'assistant',
+          content: statusMessage || "Your planning workflow has started.",
+          timestamp: new Date(),
+          planningTripId: newTripId,
+        };
+        if (lastAssistant?.suggestedTripQuery) {
+          return prev.map((message, index) => index === lastAssistantIndex ? workflowMessage : message);
+        }
+        return [...prev, workflowMessage];
+      });
+    } catch (err: any) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
-          content: result.response,
-          timestamp: new Date()
-        }
+          content: `Planning could not be started: ${message}. Please verify the connection or try again.`,
+          timestamp: new Date(),
+        },
       ]);
-      setSuggestedFollowups(generateFollowUpSuggestions(text));
+    } finally {
+      setIsLaunchingPlan(false);
+    }
+  };
+
+  const handleSelectDestination = async (targetTripId: string, destinationId: string) => {
+    setSelectedDestId(destinationId);
+    try {
+      await api.selectDestination(targetTripId, destinationId);
+      useTripStore.setState({ isPlanning: true });
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'I could not reach my memory service. Please check that the backend is running.', timestamp: new Date() }]);
+      console.error(err);
+    }
+  };
+
+  const submitPreferences = async (targetTripId: string) => {
+    if (!preferenceQuestions.every((question) => answers[question.id]?.trim())) return;
+    try {
+      await api.answerPreferences(targetTripId, answers);
+      useTripStore.setState({ preferenceQuestions: [], isPlanning: true });
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const destinations = tripState?.candidate_destinations || [];
+  const hasDestinations = destinations.length > 0;
+  const destinationChosen = Boolean(selectedDestId || tripState?.selected_destination?.id);
+
+  const handleSubmit = async (event?: React.FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
+    const text = input.trim();
+    if (!text || isLoading || isLaunchingPlan) return;
+
+    setInput('');
+    setLastUserQuery(text);
+
+    // Append user message immediately
+    setMessages((prev) => [
+      ...prev,
+      { role: 'user', content: text, timestamp: new Date() },
+    ]);
+    setIsLoading(true);
+
+    try {
+      // Pure LLM invocation - no keyword checks or hardcoded traps
+      const result = await api.sendConversationMessage(userId, conversationId, text, true);
+
+      if (result.planning_ready) {
+        await handleLaunchPlanning(
+          result.planning_query || text,
+          "I have the essentials. **Your trip brief is ready.** Planning workflow has started."
+        );
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: result.response,
+            timestamp: new Date(),
+          },
+        ]);
+      }
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content:
+            "I'm experiencing a brief connection delay to the LLM. Please check your backend connection and try again.",
+          timestamp: new Date(),
+        },
+      ]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const generateTravelResponse = (userMessage: string): string => {
-    const lower = userMessage.toLowerCase();
-    
-    // Planning-related but not explicit enough
-    if (lower.includes('trip') || lower.includes('travel') || lower.includes('vacation')) {
-      if (lower.includes('where') || lower.includes('destination')) {
-        return "I can help with that! There are many wonderful destinations depending on your interests. Popular choices include Goa for beaches, Shimla for mountains, Rajasthan for culture, and Kerala for nature. Where were you thinking of going?";
-      }
-      if (lower.includes('budget') || lower.includes('cost')) {
-        return "Trip budgets can vary greatly. For a 7-day trip in India: Budget travel can be ₹20,000-₹30,000, Mid-range is ₹40,000-₹70,000, and Luxury starts from ₹1,00,000+. What type of experience are you looking for?";
-      }
-      if (lower.includes('when') || lower.includes('best time')) {
-        return "The best time to visit most Indian destinations is between October and March when the weather is pleasant. For hill stations like Shimla or Manali, summer months (April-June) are ideal. For Goa, November to February is perfect. When are you planning to travel?";
-      }
-      if (lower.includes('how many') || lower.includes('people') || lower.includes('who')) {
-        return "I can plan trips for solo travelers, couples, families, or groups. The experience and recommendations will be tailored accordingly. How many people will be traveling with you?";
-      }
-      return "That sounds like a great idea! When you are ready to start planning, just tell me where you want to go, when, and for how many people. I will take care of the rest.";
-    }
-    
-    // General greetings
-    if (lower.includes('hi') || lower.includes('hello') || lower.includes('hey')) {
-      return "Hello! I am your AI Travel Assistant. Ask me about travel destinations, get recommendations, or when you are ready, I can help plan your perfect trip. Where would you like to go?";
-    }
-    
-    // How are you
-    if (lower.includes('how are you') || lower.includes('how do you')) {
-      return "I am doing great, ready to help you with your travel plans! What can I assist you with today?";
-    }
-    
-    // What can you do
-    if (lower.includes('what can you') || lower.includes('help') || lower.includes('assist')) {
-      return "I can help you plan complete trips with flights, hotels, and activities. I can also answer travel questions, give destination recommendations, suggest itineraries, and provide travel tips. When you are ready to plan a trip, just tell me where you want to go!";
-    }
-    
-    // Thank you
-    if (lower.includes('thank') || lower.includes('thanks')) {
-      return "You are welcome! Feel free to ask if you have any more travel questions or when you are ready to plan your next adventure.";
-    }
-    
-    // Default response for travel-related queries
-    if (TRAVEL_KEYWORDS.some(kw => lower.includes(kw))) {
-      return "I would be happy to help! Could you tell me more about what you are looking for? When you are ready to plan a trip, just let me know your destination, dates, and traveler count.";
-    }
-    
-    // Very generic response
-    return "I am here to help with your travel needs. When you are ready to plan a trip, just tell me where you want to go and I will create a complete itinerary for you.";
+  const handleWizardComplete = (data: IntakeData) => {
+    setShowWizard(false);
+    setMessages([]); // Clear the initial text welcome message
+    const query = `Plan a trip to ${data.destination} from ${data.origin} for ${data.duration} days for ${data.travelers} persons with a ${data.budgetStyle} budget.`;
+    handleLaunchPlanning(query, "I have the essentials. **Your trip brief is ready.** Planning workflow has started.", data);
   };
 
-  const handleSuggestionClick = (suggestion: string) => {
-    setInput(suggestion);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
-    }
-  };
+  if (showWizard) {
+    return (
+      <Card className="w-full h-[min(720px,80vh)] min-h-[520px] flex flex-col border-none overflow-hidden shadow-none bg-transparent">
+        <div className="flex-1 flex items-center justify-center p-4 overflow-y-auto">
+          <IntakeWizard onComplete={handleWizardComplete} />
+        </div>
+      </Card>
+    );
+  }
 
   return (
-    <div className="travel-chat-container">
-      <div className="travel-chat-messages">
-        <div className="messages-inner">
+    <Card className="w-full h-[min(720px,80vh)] min-h-[520px] flex flex-col border-none overflow-hidden shadow-none bg-transparent">
+      {/* Chat Messages */}
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4">
+        <div className="flex flex-col gap-5 pb-4">
           {messages.map((msg, i) => (
             <div
               key={i}
-              className={`travel-message ${msg.role === 'user' ? 'travel-message-user' : 'travel-message-assistant'}`}
+              className={cn(
+                "flex w-full",
+                msg.role === "user" ? "justify-end" : "justify-start"
+              )}
             >
-              <div className="message-bubble-wrapper">
-                <div className={`message-bubble ${msg.role === 'user' ? 'user-bubble' : 'assistant-bubble'}`}>
-                  <p className="message-text">{msg.content}</p>
-                  <span className="message-timestamp">
-                    {msg.timestamp.toLocaleTimeString('en-US', { 
-                      hour: '2-digit', 
-                      minute: '2-digit' 
-                    })}
+              <div className={cn(
+                "flex gap-3 max-w-[85%]",
+                msg.role === "user" ? "flex-row-reverse" : "flex-row"
+              )}>
+                
+                {/* Avatar */}
+                <Avatar className="w-8 h-8 border mt-0.5 shadow-sm">
+                  {msg.role === 'assistant' ? (
+                    <AvatarFallback className="bg-primary/10">
+                      <Sparkles className="w-4 h-4 text-primary" />
+                    </AvatarFallback>
+                  ) : (
+                    <AvatarFallback className="bg-muted">
+                      <User className="w-4 h-4 text-muted-foreground" />
+                    </AvatarFallback>
+                  )}
+                </Avatar>
+
+                {/* Bubble */}
+                <div className={cn(
+                  "flex flex-col gap-1.5",
+                  msg.planningTripId ? "w-full max-w-[680px]" : ""
+                )}>
+                  <div
+                    className={cn(
+                      "px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap shadow-sm",
+                      msg.role === 'user'
+                        ? "bg-primary text-primary-foreground rounded-tr-sm"
+                        : "bg-muted/50 border rounded-tl-sm text-foreground"
+                    )}
+                  >
+                    {renderMessage(msg.content)}
+
+                    {/* Elegant inline action pill to launch planner for this query */}
+                    {msg.role === 'assistant' && msg.suggestedTripQuery && !msg.planningTripId && (
+                      <div className="mt-3 pt-3 border-t border-border/50">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleLaunchPlanning(msg.suggestedTripQuery)}
+                          disabled={isLaunchingPlan}
+                          className="w-full sm:w-auto flex items-center justify-start gap-2 h-9 border-primary/30 hover:bg-primary/5 hover:border-primary/50 text-xs shadow-sm transition-all rounded-lg"
+                        >
+                          {isLaunchingPlan ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                              <span>Starting orchestration...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Compass className="w-3.5 h-3.5 text-primary" />
+                              <span className="font-medium text-foreground">Generate full 9-agent itinerary</span>
+                              <ArrowRight className="w-3.5 h-3.5 text-muted-foreground ml-auto sm:ml-2" />
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    )}
+                    
+                    {/* Live Agent Action Shimmer shown directly in the chat interface */}
+                    {msg.planningTripId && (
+                      <div className="mt-4 w-full flex flex-col gap-4">
+                        <AgentActionShimmer
+                          tripId={msg.planningTripId}
+                          compact
+                          onOpenTrip={() => router.push(`/trip/${msg.planningTripId}`)}
+                        />
+
+                        {/* If preference questions are waiting */}
+                        {tripState?.id === msg.planningTripId && preferenceQuestions.length > 0 && (
+                          <Card className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <CardHeader className="pb-3 border-b bg-muted/20 px-4 py-3 flex flex-row items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                                <Sparkles className="w-4 h-4 text-primary" />
+                              </div>
+                              <div>
+                                <CardTitle className="text-sm">Tailor Your Trip</CardTitle>
+                                <p className="text-xs text-muted-foreground">A few essentials to personalize your route.</p>
+                              </div>
+                            </CardHeader>
+                            <CardContent className="p-4 flex flex-col gap-5">
+                              {preferenceQuestions.map((question, qIdx) => (
+                                <div key={question.id} className="flex flex-col gap-2">
+                                  <div className="flex items-start gap-2">
+                                    <span className="text-xs font-bold text-muted-foreground mt-0.5">0{qIdx + 1}</span>
+                                    <label className="text-sm font-medium">{question.prompt}</label>
+                                  </div>
+                                  
+                                  {question.options && question.options.length > 0 ? (
+                                    <div className="flex flex-wrap gap-2 mt-1 pl-5">
+                                      {question.options.map((option: string) => {
+                                        const isSelected = answers[question.id] === option;
+                                        return (
+                                          <Button
+                                            key={option}
+                                            variant={isSelected ? "default" : "outline"}
+                                            size="sm"
+                                            className={cn(
+                                              "h-8 rounded-full text-xs font-medium transition-all shadow-none",
+                                              isSelected ? "shadow-sm" : ""
+                                            )}
+                                            onClick={() => setAnswers((cur) => ({ ...cur, [question.id]: option }))}
+                                          >
+                                            {isSelected && <CheckCircle2 className="w-3.5 h-3.5 mr-1" />}
+                                            {option}
+                                          </Button>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <div className="pl-5 mt-1">
+                                      <Input
+                                        type="text"
+                                        value={answers[question.id] || ""}
+                                        onChange={(e) =>
+                                          setAnswers((cur) => ({ ...cur, [question.id]: e.target.value }))
+                                        }
+                                        placeholder="Type your answer..."
+                                        className="h-9 text-sm"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </CardContent>
+                            <CardFooter className="p-4 pt-0 flex justify-end">
+                              <Button
+                                onClick={() => submitPreferences(msg.planningTripId!)}
+                                disabled={!preferenceQuestions.every((q) => answers[q.id]?.trim())}
+                                size="sm"
+                                className="gap-1.5 h-8 font-medium rounded-md text-xs shadow-sm"
+                              >
+                                Continue Planning
+                                <ArrowRight className="w-3.5 h-3.5" />
+                              </Button>
+                            </CardFooter>
+                          </Card>
+                        )}
+
+                        {/* Candidate Destinations directly inline in chat */}
+                        {tripState?.id === msg.planningTripId && hasDestinations && !destinationChosen && (
+                          <div className="mt-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <h4 className="text-xs font-bold text-primary uppercase tracking-wider mb-3">
+                              Select Candidate Destination
+                            </h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {destinations.map((dest: any) => (
+                                <DestinationCard
+                                  key={dest.id}
+                                  destination={dest}
+                                  onSelect={(destId) => handleSelectDestination(msg.planningTripId!, destId)}
+                                  isSelected={selectedDestId === dest.id}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  
+                  <span className={cn(
+                    "text-[10px] px-1 font-medium",
+                    msg.role === 'user' ? "text-muted-foreground text-right" : "text-muted-foreground"
+                  )}>
+                    {msg.timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
               </div>
             </div>
           ))}
-          
+
+          {/* Shimmering agent reasoning state directly inside the chat interface */}
           {isLoading && (
-            <div className="travel-message travel-message-assistant">
-              <div className="message-bubble-wrapper">
-                <div className="assistant-bubble">
-                  <div className="typing-indicator">
-                    <div className="typing-dot" style={{ animationDelay: '0ms' }} />
-                    <div className="typing-dot" style={{ animationDelay: '200ms' }} />
-                    <div className="typing-dot" style={{ animationDelay: '400ms' }} />
-                  </div>
+            <div className="flex w-full justify-start">
+              <div className="flex gap-3 max-w-[85%]">
+                <Avatar className="w-8 h-8 border mt-0.5 shadow-sm">
+                  <AvatarFallback className="bg-primary/10">
+                    <Sparkles className="w-4 h-4 text-primary animate-pulse" />
+                  </AvatarFallback>
+                </Avatar>
+                <div className="px-2 py-1">
+                  <AgentActionShimmer
+                    statusMessage="Thinking..."
+                    compact
+                  />
                 </div>
               </div>
             </div>
           )}
           
-          {suggestedFollowups.length > 0 && !isLoading && (
-            <div className="suggestions-container">
-              <p className="suggestions-label">Suggestions:</p>
-              <div className="suggestions-grid">
-                {suggestedFollowups.map((suggestion, i) => (
-                  <button
-                    key={i}
-                    onClick={() => handleSuggestionClick(suggestion)}
-                    className="suggestion-button"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          
-          <div ref={messagesEndRef} />
+          <div ref={messagesEndRef} className="h-1" />
         </div>
       </div>
-      
-      <form onSubmit={handleSubmit} className="travel-chat-input">
-        <div className="input-wrapper">
-          <input
+
+      {/* Input Bar */}
+      <form onSubmit={handleSubmit} className="p-4 bg-transparent shrink-0">
+        <div className="relative flex items-center w-full">
+          <Input
             id="main-chat-input"
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Chat with me about travel, or say 'Plan a trip to...' to start planning"
-            disabled={isLoading}
-            className="chat-input-field"
+            placeholder="Ask anything or describe your journey..."
+            disabled={isLoading || isLaunchingPlan}
+            className="pr-12 h-12 rounded-xl border-muted bg-muted/30 focus-visible:ring-primary/50 text-[15px] shadow-sm transition-all"
           />
-          <button
+          <Button
             type="submit"
-            disabled={!input.trim() || isLoading}
-            className="send-button"
+            size="icon"
+            disabled={!input.trim() || isLoading || isLaunchingPlan}
+            className="absolute right-1.5 top-1.5 h-9 w-9 rounded-lg shadow-sm"
           >
             {isLoading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <Send className="w-4 h-4" />
+              <Send className="w-4 h-4 ml-0.5" />
             )}
-          </button>
+          </Button>
         </div>
       </form>
-
-      <style jsx global>{`
-        .travel-chat-container {
-          width: 100%;
-          display: flex;
-          flex-direction: column;
-          background: var(--color-bg-card);
-          border: 1px solid var(--color-border-accent);
-          border-radius: var(--radius-xl);
-          overflow: hidden;
-          box-shadow: 0 8px 25px rgba(139, 92, 246, 0.08), 0 4px 12px rgba(139, 92, 246, 0.05);
-          min-height: 440px;
-          max-height: 680px;
-          transition: all var(--transition-base);
-        }
-        
-        .travel-chat-container:hover {
-          box-shadow: 0 12px 30px rgba(139, 92, 246, 0.12), 0 6px 16px rgba(139, 92, 246, 0.08);
-        }
-
-        .travel-chat-messages {
-          flex: 1;
-          overflow-y: auto;
-          padding: 24px;
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-          background: transparent;
-        }
-
-        .messages-inner {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-        }
-
-        .travel-message {
-          display: flex;
-          max-width: 90%;
-          animation: message-fade-in 0.3s ease-out;
-        }
-
-        .travel-message-assistant {
-          align-self: flex-start;
-        }
-
-        .travel-message-user {
-          align-self: flex-end;
-        }
-
-        @keyframes message-fade-in {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-
-        .message-bubble-wrapper {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-
-        .message-bubble {
-          padding: 16px 20px;
-          border-radius: var(--radius-lg);
-          position: relative;
-          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-        }
-
-        .assistant-bubble {
-          background: var(--color-bg-card);
-          color: var(--color-text-primary);
-          border: 1px solid var(--color-border);
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        }
-
-        .user-bubble {
-          background: var(--gradient-primary);
-          color: var(--color-text-inverse);
-          border: none;
-          box-shadow: 0 4px 12px rgba(139, 92, 246, 0.25);
-        }
-
-        .message-text {
-          font-size: 14px;
-          line-height: 1.6;
-          font-weight: 500;
-          white-space: pre-wrap;
-          word-wrap: break-word;
-        }
-
-        .message-timestamp {
-          font-size: 10px;
-          color: var(--color-text-muted);
-          font-weight: 400;
-          display: block;
-          margin-top: 6px;
-        }
-
-        .typing-indicator {
-          display: flex;
-          gap: 4px;
-          padding: 8px 0;
-        }
-
-        .typing-dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          background: var(--color-primary-500);
-          animation: typing-bounce 1.4s ease-in-out infinite;
-        }
-
-        @keyframes typing-bounce {
-          0%, 60%, 100% { transform: translateY(0); }
-          30% { transform: translateY(-4px); }
-        }
-
-        .suggestions-container {
-          margin-top: 12px;
-          padding: 16px 20px;
-          background: transparent;
-        }
-
-        .suggestions-label {
-          font-size: 11px;
-          font-weight: 600;
-          color: var(--color-text-muted);
-          letter-spacing: 0.04em;
-          text-transform: uppercase;
-          margin-bottom: 10px;
-        }
-
-        .suggestions-grid {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-        }
-
-        .suggestion-button {
-          padding: 8px 14px;
-          background: var(--color-bg-input);
-          border: 1px solid var(--color-border);
-          border-radius: var(--radius-md);
-          font-size: 13px;
-          font-weight: 500;
-          color: var(--color-text-secondary);
-          cursor: pointer;
-          transition: all var(--transition-fast);
-          white-space: nowrap;
-        }
-
-        .suggestion-button:hover {
-          background: var(--color-primary-50);
-          border-color: var(--color-primary-300);
-          color: var(--color-primary-700);
-        }
-
-        .travel-chat-input {
-          padding: 16px 20px;
-          background: var(--color-bg-input);
-          border-top: 1px solid var(--color-border);
-          flex-shrink: 0;
-        }
-
-        .input-wrapper {
-          display: flex;
-          gap: 12px;
-          align-items: flex-end;
-          background: var(--color-bg-base);
-          border: 1px solid var(--color-border);
-          border-radius: var(--radius-lg);
-          padding: 12px 12px 12px 20px;
-          transition: all var(--transition-fast);
-        }
-
-        .input-wrapper:focus-within {
-          border-color: var(--color-primary-400);
-          box-shadow: 0 0 0 3px var(--color-primary-glow);
-        }
-
-        .chat-input-field {
-          flex: 1;
-          padding: 12px 0;
-          background: transparent;
-          border: none;
-          font-size: 15px;
-          color: var(--color-text-primary);
-          font-weight: 500;
-          outline: none;
-          min-width: 0;
-        }
-
-        .chat-input-field::placeholder {
-          color: var(--color-text-muted);
-        }
-
-        .send-button {
-          width: 48px;
-          height: 48px;
-          border-radius: var(--radius-lg);
-          background: var(--gradient-primary);
-          border: none;
-          color: var(--color-text-inverse);
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: all var(--transition-base);
-          flex-shrink: 0;
-          box-shadow: 0 2px 8px rgba(139, 92, 246, 0.25);
-        }
-
-        .send-button:hover:not(:disabled) {
-          transform: translateY(-2px) scale(1.05);
-          box-shadow: 0 4px 16px rgba(139, 92, 246, 0.35);
-        }
-
-        .send-button:active:not(:disabled) {
-          transform: translateY(0) scale(0.98);
-        }
-
-        .send-button:disabled {
-          opacity: 0.5;
-          cursor: not-allowed;
-          transform: none;
-        }
-
-        .travel-chat-messages::-webkit-scrollbar {
-          width: 6px;
-        }
-
-        .travel-chat-messages::-webkit-scrollbar-track {
-          background: transparent;
-        }
-
-        .travel-chat-messages::-webkit-scrollbar-thumb {
-          background: var(--color-border);
-          border-radius: 3px;
-        }
-
-        .travel-chat-messages::-webkit-scrollbar-thumb:hover {
-          background: var(--color-text-muted);
-        }
-
-        @media (max-width: 520px) {
-          .travel-chat-container { min-height: 400px; }
-          .travel-chat-messages { padding: 16px 12px; }
-          .travel-chat-input { padding: 12px; }
-        }
-      `}</style>
-    </div>
+    </Card>
   );
 }

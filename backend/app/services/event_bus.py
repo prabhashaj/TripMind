@@ -23,6 +23,7 @@ _redis_available: bool | None = None
 # In-memory fallback queues for local dev without Redis
 _memory_subscribers: dict[str, list[asyncio.Queue]] = defaultdict(list)
 _memory_cache: dict[str, str] = {}
+_event_history: dict[str, list[TripEvent]] = defaultdict(list)
 
 
 async def check_redis_available() -> bool:
@@ -53,6 +54,9 @@ def _trip_channel(trip_id: str) -> str:
 
 async def publish_event(event: TripEvent) -> None:
     """Publish a TripEvent to Redis pub/sub or in-memory queues."""
+    history = _event_history[event.trip_id]
+    history.append(event)
+    del history[:-100]
     is_redis = await check_redis_available()
     payload = event.model_dump_json()
 
@@ -83,6 +87,11 @@ async def subscribe_to_trip(
     Subscribe to a trip's event channel and yield TripEvents.
     Uses Redis pub/sub if available, otherwise in-memory queue.
     """
+    # The workflow can emit its first events before the browser opens SSE.
+    # Replay the in-process history so the UI never starts at a blank action.
+    for event in _event_history.get(trip_id, []):
+        yield event
+
     is_redis = await check_redis_available()
 
     if is_redis and _redis_client:

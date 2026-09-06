@@ -4,10 +4,14 @@ FastAPI routers for trip planning.
 from __future__ import annotations
 
 import asyncio
+import json
+from pathlib import Path
+import re
 import uuid
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.core.dependencies import (
@@ -19,14 +23,18 @@ from app.core.dependencies import (
 )
 from app.core.logging import get_logger
 from app.models.trip_state import PlanningStatus, TripState
+from app.providers.base import (
+    FlightProvider,
+    HotelProvider,
+    LLMProvider,
+    SearchProvider,
+    TrainProvider,
+)
 from app.services.memory import memory_store
 from app.workflows.trip_workflow import run_trip_workflow
 
 router = APIRouter(prefix="/api/trips", tags=["trips"])
 logger = get_logger(__name__)
-
-import json
-from pathlib import Path
 
 DATA_DIR = Path(__file__).parent.parent.parent / ".data" / "trips"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -74,6 +82,23 @@ _trip_store = PersistentTripStore()
 class StartPlanningRequest(BaseModel):
     query: str
     user_id: str | None = None
+    home_location: str | None = None
+    home_country: str | None = None
+    currency: str | None = None
+    trip_duration: str | None = None
+    budget: str | None = None
+
+
+def _missing_preflight_fields(request: StartPlanningRequest) -> list[str]:
+    query = request.query.lower()
+    has_duration = bool(request.trip_duration or re.search(r"\b\d+[- ]*(?:day|days|night|nights|week|weeks)\b", query))
+    has_budget = bool(request.budget or re.search(r"(?:₹|rs\.?|inr|usd|\$|€|eur)\s*[\d,]+|(?:budget of|under)\s*(?:₹|rs\.?|inr|usd|\$|€|eur)?\s*[\d,]+|no budget|without a budget", query))
+    missing: list[str] = []
+    if not has_duration:
+        missing.append("trip_duration")
+    if not has_budget:
+        missing.append("budget")
+    return missing
 
 
 class ModifyTripRequest(BaseModel):
@@ -96,27 +121,40 @@ class SelectHotelRequest(BaseModel):
     hotel_id: str
 
 
-@router.post("/plan")
+@router.post("/plan", response_model=None)
 async def start_planning(
     request: StartPlanningRequest,
     background_tasks: BackgroundTasks,
-    llm=Depends(get_llm_provider),
-    search=Depends(get_search_provider),
-    flights=Depends(get_flight_provider),
-    trains=Depends(get_train_provider),
-    hotels=Depends(get_hotel_provider),
-) -> dict[str, Any]:
+    llm: LLMProvider = Depends(get_llm_provider),
+    search: SearchProvider = Depends(get_search_provider),
+    flights: FlightProvider = Depends(get_flight_provider),
+    trains: TrainProvider = Depends(get_train_provider),
+    hotels: HotelProvider = Depends(get_hotel_provider),
+) -> Any:
     """
     Start the trip planning workflow.
     Returns immediately with trip_id; planning runs in background.
     Results are streamed via SSE at /api/trips/{trip_id}/events.
     """
+    missing_fields = _missing_preflight_fields(request)
+    if missing_fields:
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error": "missing_required_trip_details",
+                "missing_fields": missing_fields,
+                "message": "Please provide the required trip details before planning starts.",
+            },
+        )
+
     trip_id = str(uuid.uuid4())
 
     state = TripState(
         trip_id=trip_id,
         user_id=request.user_id,
         original_query=request.query,
+        origin=request.home_location,
+        budget_currency=request.currency or "INR",
         planning_status=PlanningStatus.IDLE,
     )
     state.conversation_history.append({"role": "user", "content": request.query})
@@ -124,7 +162,7 @@ async def start_planning(
         memory_store.remember(request.user_id, request.query)
     _trip_store[trip_id] = state
 
-    async def run_workflow():
+    async def run_workflow() -> None:
         try:
             final_state = await run_trip_workflow(
                 state=state,
@@ -137,7 +175,13 @@ async def start_planning(
             _trip_store[trip_id] = final_state
         except Exception as exc:
             logger.error("workflow_error", trip_id=trip_id, error=str(exc))
-            _trip_store[trip_id].planning_status = PlanningStatus.FAILED
+            cur = _trip_store.get(trip_id)
+            if cur:
+                cur.planning_status = PlanningStatus.FAILED
+                _trip_store[trip_id] = cur
+            else:
+                state.planning_status = PlanningStatus.FAILED
+                _trip_store[trip_id] = state
 
     background_tasks.add_task(run_workflow)
 
@@ -162,11 +206,11 @@ async def answer_preferences(
     trip_id: str,
     request: PreferenceAnswersRequest,
     background_tasks: BackgroundTasks,
-    llm=Depends(get_llm_provider),
-    search=Depends(get_search_provider),
-    flights=Depends(get_flight_provider),
-    trains=Depends(get_train_provider),
-    hotels=Depends(get_hotel_provider),
+    llm: LLMProvider = Depends(get_llm_provider),
+    search: SearchProvider = Depends(get_search_provider),
+    flights: FlightProvider = Depends(get_flight_provider),
+    trains: TrainProvider = Depends(get_train_provider),
+    hotels: HotelProvider = Depends(get_hotel_provider),
 ) -> dict[str, str]:
     state = _trip_store.get(trip_id)
     if not state:
@@ -178,14 +222,24 @@ async def answer_preferences(
     state.planning_status = PlanningStatus.IDLE
     _trip_store[trip_id] = state
 
-    async def resume_workflow():
+    async def resume_workflow() -> None:
+        s = _trip_store.get(trip_id)
+        if not s:
+            return
         try:
-            final_state = await run_trip_workflow(state, llm, search, flights, trains, hotels)
+            final_state = await run_trip_workflow(
+                state=s,
+                llm=llm,
+                search=search,
+                flight_provider=flights,
+                train_provider=trains,
+                hotel_provider=hotels,
+            )
             _trip_store[trip_id] = final_state
         except Exception as exc:
             logger.error("preference_resume_failed", trip_id=trip_id, error=str(exc))
-            state.planning_status = PlanningStatus.FAILED
-            _trip_store[trip_id] = state
+            s.planning_status = PlanningStatus.FAILED
+            _trip_store[trip_id] = s
 
     background_tasks.add_task(resume_workflow)
     return {"status": "planning_resumed", "message": "Thanks. Continuing with your requirements."}
@@ -196,11 +250,11 @@ async def select_destination(
     trip_id: str,
     request: SelectDestinationRequest,
     background_tasks: BackgroundTasks,
-    llm=Depends(get_llm_provider),
-    search=Depends(get_search_provider),
-    flights=Depends(get_flight_provider),
-    trains=Depends(get_train_provider),
-    hotels=Depends(get_hotel_provider),
+    llm: LLMProvider = Depends(get_llm_provider),
+    search: SearchProvider = Depends(get_search_provider),
+    flights: FlightProvider = Depends(get_flight_provider),
+    trains: TrainProvider = Depends(get_train_provider),
+    hotels: HotelProvider = Depends(get_hotel_provider),
 ) -> dict[str, Any]:
     """
     Select a destination from candidates and trigger transport/hotel/activity research.
@@ -228,26 +282,69 @@ async def select_destination(
     from app.agents.verification import run_verification_agent
 
     async def run_post_selection():
-        s = _trip_store[trip_id]
-        results = await asyncio.gather(
-            run_transport_agent(s, flights, trains, search),
-            run_hotel_agent(s, hotels, llm, search),
-            run_activity_agent(s, llm, search),
-            return_exceptions=True,
-        )
-        for r in results:
-            if isinstance(r, TripState):
-                if r.transport.intercity:
-                    s.transport = r.transport
-                if r.hotels.options:
-                    s.hotels = r.hotels
-                if r.activities:
-                    s.activities = r.activities
+        from app.models.events import TripEvent, EventType, AgentStatus
+        from app.services.event_bus import publish_event
+        s = _trip_store.get(trip_id)
+        if not s:
+            return
+        try:
+            agent_tasks = [
+                ("transport", run_transport_agent(s, flights, trains, search)),
+                ("hotel", run_hotel_agent(s, hotels, llm, search)),
+                ("activity", run_activity_agent(s, llm, search)),
+            ]
+            raw_results = await asyncio.gather(*(t[1] for t in agent_tasks), return_exceptions=True)
+            for (name, _), r in zip(agent_tasks, raw_results):
+                if isinstance(r, Exception):
+                    logger.error("post_selection_agent_failed", agent=name, error=str(r))
+                    await publish_event(TripEvent(
+                        trip_id=s.trip_id,
+                        run_id=s.planning_run_id,
+                        type=EventType.AGENT_FAILED,
+                        agent=name,
+                        status=AgentStatus.FAILED,
+                        message=f"{name.capitalize()} research encountered an issue: {str(r)[:100]}",
+                        data={"error": str(r)},
+                    ))
+                elif isinstance(r, TripState):
+                    if r.transport.intercity:
+                        s.transport = r.transport
+                    if r.hotels.options:
+                        s.hotels = r.hotels
+                    if r.activities:
+                        s.activities = r.activities
 
-        s = await run_itinerary_agent(s, llm)
-        s = await run_budget_agent(s)
-        s = await run_verification_agent(s)
-        _trip_store[trip_id] = s
+            s = await run_itinerary_agent(s, llm)
+            s = await run_budget_agent(s)
+            s = await run_verification_agent(s)
+            s.planning_status = PlanningStatus.COMPLETE
+            s.touch()
+            _trip_store[trip_id] = s
+
+            await publish_event(TripEvent(
+                trip_id=s.trip_id,
+                run_id=s.planning_run_id,
+                type=EventType.TRIP_READY,
+                agent="orchestrator",
+                status=AgentStatus.COMPLETED,
+                message="Your complete personalized itinerary is ready",
+                data={
+                    "trip_id": s.trip_id,
+                    "destination": s.selected_destination.name if s.selected_destination else None,
+                    "trip_state": s.model_dump(mode="json"),
+                },
+            ))
+        except Exception as exc:
+            logger.error("run_post_selection_fatal", error=str(exc))
+            await publish_event(TripEvent(
+                trip_id=trip_id,
+                run_id=getattr(s, "planning_run_id", ""),
+                type=EventType.TRIP_ERROR,
+                agent="orchestrator",
+                status=AgentStatus.FAILED,
+                message=f"Planning failed: {str(exc)}",
+                data={"error": str(exc)},
+            ))
 
     background_tasks.add_task(run_post_selection)
 
@@ -292,11 +389,11 @@ async def modify_trip(
     trip_id: str,
     request: ModifyTripRequest,
     background_tasks: BackgroundTasks,
-    llm=Depends(get_llm_provider),
-    search=Depends(get_search_provider),
-    flights=Depends(get_flight_provider),
-    trains=Depends(get_train_provider),
-    hotels=Depends(get_hotel_provider),
+    llm: LLMProvider = Depends(get_llm_provider),
+    search: SearchProvider = Depends(get_search_provider),
+    flights: FlightProvider = Depends(get_flight_provider),
+    trains: TrainProvider = Depends(get_train_provider),
+    hotels: HotelProvider = Depends(get_hotel_provider),
 ) -> dict[str, Any]:
     """
     Natural-language trip modification.
@@ -384,7 +481,7 @@ async def get_sources(trip_id: str) -> dict[str, Any]:
     state = _trip_store.get(trip_id)
     if not state:
         raise HTTPException(status_code=404, detail="Trip not found")
-    sources_by_category: dict[str, list] = {}
+    sources_by_category: dict[str, list[Any]] = {}
     for s in state.sources:
         cat = s.data_category
         if cat not in sources_by_category:

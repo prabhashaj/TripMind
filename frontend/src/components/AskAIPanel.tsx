@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { useTripStore } from '@/store/trip-store';
-import { ArrowUp, Sparkles, WandSparkles, Loader2, Send, Bot, User, Star, Zap } from 'lucide-react';
+import { Sparkles, WandSparkles, Loader2, Send, Bot, User, Zap } from 'lucide-react';
 
 interface AskAIPanelProps {
   tripId: string;
@@ -50,7 +50,7 @@ export function AskAIPanel({ tripId }: AskAIPanelProps) {
     setIsLoading(true);
 
     try {
-      const response = await api.modifyTrip(tripId, text.trim());
+      await api.modifyTrip(tripId, text.trim());
       setIsPlanning(true);
 
       setMessages((prev) => [

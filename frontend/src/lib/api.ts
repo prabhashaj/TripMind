@@ -19,7 +19,14 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export interface StartPlanningResponse { trip_id: string; status: string; message: string; }
 export interface MemoryRecord { user_id: string; facts: string[]; preferences: Record<string, string>; saved_destinations: string[]; updated_at: string; }
-export interface ConversationResponse { response: string; conversation_id: string; short_term: { role: string; content: string }[]; long_term: MemoryRecord; }
+export interface ConversationResponse {
+  response: string;
+  conversation_id: string;
+  short_term: { role: string; content: string }[];
+  long_term: MemoryRecord;
+  planning_ready?: boolean;
+  planning_query?: string;
+}
 export type Destination = any;
 export type Activity = any;
 export type HotelOption = any;
@@ -29,7 +36,7 @@ export type ItineraryItem = any;
 export type Budget = any;
 
 export const api = {
-  startPlanning: (query: string, userId?: string) => request<StartPlanningResponse>("/api/trips/plan", { method: "POST", body: JSON.stringify({ query, user_id: userId }) }),
+  startPlanning: (query: string, userId?: string, profile?: { home_location?: string; home_country?: string; currency?: string; trip_duration?: string; budget?: string }) => request<StartPlanningResponse>("/api/trips/plan", { method: "POST", body: JSON.stringify({ query, user_id: userId, ...profile }) }),
   getTrip: (tripId: string) => request<any>(`/api/trips/${tripId}`),
   selectDestination: (tripId: string, destinationId: string) => request<any>(`/api/trips/${tripId}/select-destination`, { method: "POST", body: JSON.stringify({ destination_id: destinationId }) }),
   selectTransport: (tripId: string, transportId: string) => request<any>(`/api/trips/${tripId}/select-transport`, { method: "POST", body: JSON.stringify({ transport_id: transportId }) }),

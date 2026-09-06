@@ -1,7 +1,7 @@
-﻿"use client";
+"use client";
 
 import { useTripStore } from "@/store/trip-store";
-import { CheckCircle2, AlertCircle, Clock, Activity, Loader2 } from "lucide-react";
+import { CheckCircle2, AlertCircle, Clock, Activity } from "lucide-react";
 
 const AGENT_ORDER = [
   "orchestrator","user_preference","destination","transport",

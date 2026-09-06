@@ -5,13 +5,13 @@ Uses Tavily search + Mistral to find attractions, experiences, and restaurants.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
 
 from app.core.logging import get_logger
 from app.models.events import AgentName, AgentStatus, EventType, TripEvent
-from app.models.trip_state import ActivityItem, DataSource, GeoPoint, TripState
+from app.models.trip_state import ActivityItem, DataSource, TripState
 from app.providers.base import LLMProvider, SearchProvider
 from app.services.event_bus import publish_event
 
@@ -92,17 +92,17 @@ async def run_activity_agent(
     results_list = await asyncio.gather(*search_tasks, return_exceptions=True)
 
     all_results: list[dict] = []
-    for i, r in enumerate(results_list):
-        if not isinstance(r, Exception):
+    for r in results_list:
+        if isinstance(r, list):
             all_results.extend(r)
             for item in r:
-                if item.get("url"):
+                if isinstance(item, dict) and item.get("url"):
                     state.add_source(DataSource(
-                        title=item.get("title", item["url"]),
+                        title=str(item.get("title") or item.get("url") or "Activity Source"),
                         provider="Tavily Search",
                         url=item["url"],
                         data_category="activities",
-                        retrieved_at=datetime.utcnow(),
+                        retrieved_at=datetime.now(timezone.utc),
                         is_live=True,
                     ))
 
@@ -150,7 +150,7 @@ async def run_activity_agent(
                     currency=state.budget_currency,
                     opening_hours=item.get("opening_hours"),
                     source="Tavily Search",
-                    retrieved_at=datetime.utcnow(),
+                    retrieved_at=datetime.now(timezone.utc),
                     tags=item.get("tags", []),
                 )
                 activities.append(activity)
@@ -168,7 +168,7 @@ async def run_activity_agent(
         image_results = await asyncio.gather(*image_tasks, return_exceptions=True)
         used_images: set[str] = set()
         for activity, result in zip(activities, image_results):
-            if isinstance(result, Exception):
+            if not isinstance(result, list):
                 continue
             for item in result:
                 image_url = item.get("image_url")
@@ -213,7 +213,7 @@ def _build_activity_queries(
     currency: str,
 ) -> list[str]:
     queries = [
-        f"top things to do in {destination} 2024 attractions",
+        f"top things to do in {destination} attractions",
         f"best local food experiences restaurants {destination}",
     ]
     if interests:

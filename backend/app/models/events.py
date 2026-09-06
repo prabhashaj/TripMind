@@ -5,11 +5,15 @@ Every meaningful agent/tool action generates a TripEvent.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class EventType(str, Enum):
@@ -46,11 +50,13 @@ class EventType(str, Enum):
     # Replanning
     REPLANNING_STARTED = "replanning.started"
     REPLANNING_COMPLETED = "replanning.completed"
+    REPLANNING_FAILED = "replanning.failed"
 
     # Trip lifecycle
     TRIP_READY = "trip.ready"
     TRIP_UPDATED = "trip.updated"
     TRIP_ERROR = "trip.error"
+    NODE_TIMEOUT = "node.timeout"
 
     # Provider status
     PROVIDER_UNAVAILABLE = "provider.unavailable"
@@ -72,7 +78,7 @@ class TripEvent(BaseModel):
     event_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     trip_id: str
     run_id: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=utc_now)
     type: EventType
     agent: str | None = None
     tool: str | None = None
@@ -92,7 +98,7 @@ class AgentStatusSummary(BaseModel):
     """Snapshot of all agent statuses — sent periodically via SSE."""
     trip_id: str
     run_id: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=utc_now)
     agents: dict[str, AgentStatus] = Field(default_factory=dict)
     messages: dict[str, str] = Field(default_factory=dict)
 

@@ -223,22 +223,7 @@ async def run_user_preference_agent(
 
 def _build_clarifying_questions(extracted: ExtractedPreferences, query: str) -> list[dict[str, Any]]:
     """Create a short, data-driven set of choices from fields absent in the prompt."""
-    questions: list[dict[str, Any]] = []
-    if not extracted.origin:
-        questions.append({"id": "origin", "prompt": "Where will you be travelling from?", "options": [], "allow_text": True})
-    if not extracted.destinations_requested:
-        questions.append({"id": "destination", "prompt": "Where would you like to go?", "options": [], "allow_text": True})
-    if not _travellers_are_explicit(query):
-        questions.append({"id": "travelers", "prompt": "How many people are travelling?", "options": ["1 person", "2 people", "3 people", "4+ people"], "allow_text": True})
-    if not extracted.start_date and not extracted.end_date and not extracted.dates_flexible:
-        questions.append({"id": "dates", "prompt": "When would you like to travel?", "options": ["Flexible dates", "Next month", "This season"], "allow_text": True})
-    if not extracted.duration_days:
-        questions.append({"id": "duration", "prompt": "How many days should we plan?", "options": ["3 days", "5 days", "7 days", "10 days"], "allow_text": False})
-    if not extracted.budget_amount:
-        questions.append({"id": "budget", "prompt": "What is your total trip budget?", "options": ["₹25,000", "₹60,000", "₹1,00,000", "₹1,50,000+"], "allow_text": True})
-    if not extracted.interests:
-        questions.append({"id": "style", "prompt": "What should the trip feel like?", "options": ["Slow and scenic", "Beach and food", "Culture and history", "Adventure"], "allow_text": False})
-    return questions
+    return []
 
 
 def _travellers_are_explicit(query: str) -> bool:
